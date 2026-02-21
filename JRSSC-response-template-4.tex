@@ -1,0 +1,184 @@
+\documentclass[11pt]{article}
+
+\usepackage{biblatex}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[a4paper,margin=0.8in]{geometry}
+\usepackage{xcolor}
+\newcommand{\response}{\par\noindent\textbf{Response:}\par\vspace{4\baselineskip}}
+
+\begin{document}
+
+\begin{center}
+{\Large \textbf{Point-by-Point Responses}}\\[3pt]
+\textbf{Manuscript ID: JRSSC-May-2025-0130}
+\end{center}
+
+\definecolor{azure}{rgb}{0.0, 0.5, 1.0}
+
+% \definecolor{tblue}{}{}
+
+\section*{Response to the AE}
+
+\begin{enumerate}
+
+% ===== AE (3 items) =====
+\item \textit{Are there any confounders for the important variables (BD, TD, and SMU) that might obfuscate any causal interpretation of the `implied causal' effects of changing the covariates on years of life gained? When estimating precise life years gained from interventions on these covariates, you need a no unmeasured confounding assumption, which should be made explicit.}
+
+\response \vspace{-45pt} \textcolor{azure}{We completely agree with the reviewer. Following the advice, in this revision, we avoid any reference to interventions in covariates and associated life-years gained after future interventions. The causal analysis will be beyond the scope of the current analysis, because that will require further methodological developments and also more careful consideration of standard assumptions, such as ignorability, that are not straightforward for this study.} 
+\vspace{15pt}
+\item \textit{Some covariates (e.g., treatment delay or biopsy delay) could affect whether the cancer is local, regional or distal when it is detected (the strata could be a mediator between the effect of treatment delay and survival), and conditioning on the local/regional/distal strata may induce collider bias and complicate interpretation of the estimated effects.}
+\response \vspace{-45pt} 
+\color{azure}
+
+
+This point is related to the previous comment, and we reiterate that we now carefully avoid suggesting any causal implications of the current paper. We would make it clear that, in the case of the Treatment Delay variable, the stratification variables of stage and race are not mediators because TD happens after the stage of the cancer has been somewhat ascertained by initial test and biopsy. However, the stage can be a mediator for biopsy delay (BD), but the time threshold used for the indicator of BD is not long enough for the stage of cancer at initial detection to transition to a different stage at biopsy. Given the stage of the cancer, BD can still be associated with the survival of the patient because it can delay the delivery of the appropriate care, and it is also a measure of the quality of care.
+
+
+In the first paragraph of the Data Analysis Section, we now include the following: 
+
+\emph{
+  We assess these hazards separately for 6 strata based on the combinations of two races (African American (AA) and Non-AA (WA) and 3 stages of diagnosis (Distant/Regional/Local abbreviated as D/R/L) because for all 3 stages of BC, the existing differences in cancer survival between AA and WA at the national level are very well recognized (Jao et al., 2022; Society, 2022). Particularly for the FCR registry from FL, this is also evident from the Kaplan-Meier plots given in Figure~S1 of the supplementary materials and the p-value ($<0.01$) of the stratified log-rank test to evaluate racial differences in survival across all 3 cancer stages.
+}
+
+\normalcolor
+
+\vspace{15pt}
+
+\item \textit{It may be more interesting and informative to look at the estimated effects of BD, TD, and SMU from a model that excludes the mediator variables, as comparing predictions from such a model would give a better estimate of the total effect of a particular variable.}
+
+\response \vspace{-45pt} \textcolor{green!80!black}{To Durbadal: Please do an analysis excluding stratification based on 2 strata based on races. }
+\vspace{15pt}
+
+\end{enumerate}
+
+\section*{Response to Referee 1}
+
+\begin{enumerate}
+
+
+% ===== Referee 1 (9 items) =====
+
+\item \textit{The title of the paper emphasizes the proposed methodology. However, it should be revised to highlight the application, since the developed method addresses only one unobserved covariate, rather than multiple covariates measured with error. This makes it less general compared to other works in the measurement error literature.}
+
+
+
+
+\response \vspace{-45pt} \textcolor{azure}{We have changed the title now to emphasize our focus on the application. We believe htat our method can handle multiple unobservable covariates, but, that will require us to make some changes to the our code. The modification to handle (say) two unobservable covariates  $(M_{1i}, M_{2i})$ only requires us to specify a joint model for $(\mathbf{M}_1,\mathbf{M}_2)$ in Section~2. 
+(instead of the current model for $\mathbf{M}$ where $M_i$ is a scalar), 
+and then sample from $p(\mathbf{M}_1,\mathbf{M}_2,\eta_0| \mathbf{D}_0)$ in Step-1.}
+
+\vspace{15pt}
+
+\item \textit{Following up on the first comment, can this method be adapted to include multiple covariates that are possibly on different levels (cluster, stratum, individual)? If the authors wish to retain the current title, the methodology must be able to accommodate more general scenarios.}
+
+\response \vspace{-45pt} \color{azure}
+
+We have now changed the title of the article to emphasize our application, as requested. To answer your question, our method, along with the computational algorithm, is general enough to handle multiple unobserved variables at different levels. However, we believe that such an extension is non-trivial in terms of computational details, and it also does not match the details of the analysis that we perform (so, we believe it is beyond the scope of this work).
+
+\normalcolor
+
+\textcolor{green!80!black}{Durbadal needs to check if there are many papers on spatial statistics with multivariate responses.: MDAGAR? by Gao.et al., MCAR by Jin et al. 3. Discussion on how it can be generalised on an individual level as well. }
+\vspace{15pt}
+
+\item \textit{Page 2, line 8, "not directly unobservable." What does that mean? It doesn't make sense.}
+\response \vspace{-45pt} \textcolor{azure}{We intended ``not directly observable.'' We have fixed this typo.}
+\vspace{15pt}
+
+
+\item \textit{It was mentioned that the median cluster size is 530, with the minimum being one and the maximum 6,234. One of the key features is the ability to handle variable cluster sizes. Is there any analysis on how such highly variable cluster sizes affect the results?}
+
+\response \vspace{-45pt} 
+
+\textcolor{green!80!black}{Plan for Durbadal: (1) Plot posterior CI of $M_i$ versus $log(n_i)$; (2) Plot the (2) Plot the CI of LGY(10) of some clusters (2-3 small, 1 medium and 2 large clusters) versus cluster sizes.}
+
+\vspace{15pt}
+
+\item \textit{The mean function within the CDF of the standard normal distribution is estimated using SBART. In fact, BART can do the same. What are the benefits of using SBART here? This should be clearly pointed out.}
+
+
+\response \vspace{-45pt} 
+\textcolor{azure}{It is true that BART can also be used for this purpose (generally speaking, it is true that any place where SBART could be used it is also possible to use BART, or a Gaussian process for that matter). The advantage of SBART over BART is that, when the underlying response surface $b_0(\mathbf x)$ is smooth, BART can perform poorly (and as illustrated by Linero and Yang, 2018, the gap can be somewhat large). We have added the following statement to Section~2.1: ``However, when the underlying true response surface $b_0(\mathbf{x})$ is believed to be smooth, as is often the case in practice, prediction accuracy can be further improved theoretically, practically, and without compromising bias by extending the BART to SBART (Linero and Yang, 2018).''}
+
+\vspace{15pt}
+
+\item \textit{In the equation below (1) on page 4 (lines 33-35), the hazard function is nonparametrically estimated using a standard normal CDF. What are the specific reasons for this? Is this an arbitrary choice or something necessary for the algorithm?}
+
+\response \vspace{-45pt}
+\color{azure}
+
+In Section~2.2, we now briefly provide details on the use of the normal CDF. The reviewer is absolutely correct that this formulation of hazard is not arbitrary, and indeed it is necessary for the algorithm. Our Gibbs sampler is based on treating the survival time as the first occurrence time coming from a thinned Poisson process; this strategy is described in Basak et al. (2022, Biometrics) and Linero et al. (2022, Bayesian Analysis). The use of a standard normal CDF allows for an Albert-Chib style sampling algorithm for sampling the latent ``unthinned'' Poisson process; it is possible to use a logistic link instead, but an exponential link would not work. \textcolor{green!80!black}{Need to add this additional justification about the Poisson thinning to the manuscript.}
+
+We note that this formulation does not impose any restrictions on the hazard function; it is still a time-varying fully-nonparametric function of both $M_i$ and $\mathbf{x}_{ij}$.
+
+\vspace{15pt}
+
+\normalcolor
+
+\item \textit{A CAR model is assumed for the correlation matrix of the cluster-level frailties, which is acceptable. The same structure is assumed for the cluster-level unobserved covariate. Is there any sensitivity analysis for this assumption regarding the covariate?}
+
+\response \vspace{-45pt} 
+
+\color{azure}
+
+We have modified Section~1 to include that the BRFSS database has very variable cluster sizes with very small sample sizes for many of the rural counties. Also, the cluster sizes in FCR and BRFSS are very different. We now mention in Section~5 that, as previous works by \cite{Bartlett16} and others suggest, the method of using just the estimated $M_i$ as a plug-in for the unobservable $M_i$ (without taking care of spatial association among $M_i$) usually works reasonably well if the true $Var[M_i\vert \mathcal{D}_0]$ remains small and somewhat constant across all 67 clusters. For our study with highly variable cluster sizes, the estimated values of $Var[M_i\vert \mathcal{D}_0]$ are extremely variable, especially if the spatial association among $\mathbf{M}$ is not allowed. This can be seen in the plot of the estimated $Var[M_i\vert \mathcal{D}_0]$ versus $log(m_{0i})$ given in (\textcolor{green!80!black}{Durbadal??}). A spatially clustered model for $M_i$ is a tool for pooling all the available information across counties to have a more accurate assessment of $M_i$ from these smaller counties.
+
+\textcolor{green!80!black}{Plan: Durbadal, please perform an analysis using a spatially independent model for $M_i$. Please make a plot of Bayes (using spatial association) estimates and usual estimates of $Var[M_i\vert \mathcal{D}_0]$ versus $\log(n_{0i})$. The latter should be easy.}
+
+\vspace{15pt}
+
+\normalcolor
+
+\item \textit{For the methodology, what is the typical computation time? Judging from the 20-replication size in the simulation study (which may be a bit too small), the running time could be substantial, especially for a dataset of 76,164 individuals. The algorithm includes a Metropolis-Hastings step and two Hamiltonian steps. What are the values of the hyperparameters? What are the acceptance rates? How are these hyperparameters tuned? The SBART also has hyperparameters, and how are they tuned? Are there any diagnostics indicating satisfactory mixing? The authors should make the methodology development and data analysis sections more comprehensive.}
+
+\response \vspace{-45pt} \textcolor{green!80!black}{Plan: Durbadal, please answer this soon.}
+
+
+\vspace{15pt}
+
+\item \textit{Is there an R package available for the dissemination of the methodology?}
+
+\response \vspace{-45pt} \textcolor{green!80!black}{Plan: Durbadal, please create the github site and put the programs and directions ASAP. Mention the site address here.}
+\vspace{15pt}
+
+
+
+\section*{Response to Referee 2}
+\setcounter{enumi}{0}
+
+\item \textit{When introducing SBART in the survival data, this is done by putting this term in the conditional hazard function in (2). Why is the normal transformation used here? A hazard function needs to be positive; why not consider a transform that leads to positive contributions? This normal transformation gives a contribution between 0 and 1.}
+
+\response \vspace{-45pt} \color{azure}
+
+This was also asked by Referee 1, and for convenience we give same response here. In Section~2.2, we now briefly provide details on the use of the normal CDF. The reviewer is absolutely correct that this formulation of hazard is not arbitrary, and indeed it is necessary for the algorithm. Our Gibbs sampler is based on treating the survival time as the first occurrence time coming from a thinned Poisson process; this strategy is described in Basak et al. (2022, Biometrics) and Linero et al. (2022, Bayesian Analysis). The use of a standard normal CDF allows for an Albert-Chib style sampling algorithm for sampling the latent ``unthinned'' Poisson process; it is possible to use a logistic link instead, but an exponential link would not work. \textcolor{green!80!black}{Need to add this additional justification about the Poisson thinning to the manuscript.}
+
+We note that this formulation does not impose any restrictions on the hazard function; it is still a time-varying fully-nonparametric function of both $M_i$ and $\mathbf{x}_{ij}$.
+
+Speaking directly to the fact that the normal CDF is always between 0 and 1: if we used (say) the exponential link $e^{b(t,m,x)}$ instead, then we would not be able to treat the survival time as a realization from a thinned Poisson process, because the ``thinning probability'' might exceed 1. The practical implication is that the model implicitly encodes that the hazard is dominated by $\lambda_0 \, W_i$ but, because these parameters can be arbitrarily large, we do not actually have any restrictions. 
+
+
+\normalcolor
+
+\item \textit{The authors state in their model that the different unobserved frailty terms account for the association within the cluster. Unfortunately, this is not true. Since the parameters of the frailty distribution can be estimated from the marginal distributions, the frailty term expresses a heterogeneity between the different clusters. This is not the same as the association. Could you elaborate on this?}
+
+\response \vspace{-45pt} 
+
+\color{azure}
+
+\textcolor{red!90!blue!50!black!50}{Tony: I'm not sure what the reviewer is asking or whether this response addresses what they are asking. In a Bayesian sense, the observations within a cluster are correlated; maybe they mean that the $W_i$'s can be estimated? But I'm not sure what the point is in making this distinction. Anyway, probably we should find a way to say ``you're right, and we fixed it'' in some way.} The ability of the shared frailty models to address both the within-cluster association as well as the variability among clusters has been extensively explored in the literature (for example, we refer to Oakes (1982) and the book by Hougaard (2000) in this paper). These works (notably, Oakes, 1982) also address the issue of the identifiability of the frailty distribution only when we have at least bivariate survival (that is, some clusters with $\ge 2$ subjects) data with fully nonparametric hazards. All the existing results about the identifiability of the parameters consider independent clusters (unlike spatially associated clusters for our problem). We are not aware of any existing result about the identifiability of the variance of the frailty for a completely nonparametric hazard function if we have only 1 subject for each of the spatially associated clusters.
+\vspace{15pt}
+
+\normalcolor
+
+\item \textit{In the simulation study, the simulated data sets contained only uncensored data. Why did you not consider censoring in these simulations and what is the impact of censoring on this model?}
+\response \vspace{-45pt} \textcolor{green!80!black}{Plan: Durbadal, any update?}
+\vspace{15pt}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+
+
+\end{enumerate}
+
+\end{document}
