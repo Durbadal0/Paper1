@@ -257,8 +257,7 @@ Xq_base <- cbind(as.numeric(outer(sd_df$time, qw))/max_time, 0, X[q_rows, , drop
 Xy_base <- cbind(sd_df$time/max_time, 0, X)
 rescale_all <- function(f) { S_amse_sum <<- S_amse_sum*f; S_aes_sum <<- S_aes_sum*f
 w_lam <<- w_lam*f; w_W <<- w_W*f; sumw <<- sumw*f }
-## note: the stored per-draw curves S_aes_draws / S_aesM_draws are NOT rescaled --
-## they are raw draws, and their weights are recovered from lw_keep at the end.
+
 d_cnt <- tabulate(cty[delta == 1], nbins = N)          # events per cluster (fixed)
 sy    <- as.numeric(tapply(sd_df$time, factor(cty, levels = 1:N), sum))
 
@@ -383,13 +382,7 @@ S_ph_aes  <- if (!is.null(ph)) {
   lp <- as.numeric(xaes %*% bph[paste0("x",1:p)]) + bph["M"] * sapply(aes_cases, function(a) a["p0"])
   exp(-W_ph[1] * outer(exp(lp), H0(pt))) } else matrix(NA, 4, nPT)
 
-################################################################################
-# 8. Each method's own pointwise 95% interval, on the AES grid (4 x 100 points)
-#    Bayesian method -> CREDIBLE interval; frequentist competitors -> BOOTSTRAP
-#    confidence interval.  Computed for every replicate and saved; version 7
-#    does not use them for anything (no coverage), they are stored for later use.
-#    No t distribution, no normal approximation, no standard error is involved.
-################################################################################
+
 lg("intervals: SBART weighted credible band")
 lwk   <- lw_keep[1:n_keep]
 Wt    <- exp(lwk - max(lwk))               # Step-3 weights; all 1 when step3 = 0

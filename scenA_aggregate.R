@@ -1,13 +1,4 @@
-#!/usr/bin/env Rscript
-################################################################################
-# VERSION 7 aggregator.  Prints the AMSE table, draws the AMSE boxplot and the
-# four-panel AES figure, and collects each replicate's 95% intervals.
-#   * NO coverage is computed or printed anywhere.
-#   * NO t distribution, standard deviation or standard error is used to build
-#     any interval or band.  The AMSE boxplot and the AES bands come from the
-#     replicates themselves; the per-replicate intervals come from the posterior
-#     draws (SBART) and from bootstrap resamples (RSF, PH-frailty).
-################################################################################
+###########################################
 rundir <- if (length(commandArgs(TRUE)) >= 1) commandArgs(TRUE)[1] else "scenA_v7_replication"
 fs  <- sort(list.files(rundir, pattern = "^rep[0-9]+\\.rds$", full.names = TRUE))
 res <- lapply(fs, readRDS)
@@ -25,10 +16,7 @@ amse95 <- t(sapply(res, function(x) x$amse_t95))
 if (R == 1) { amse <- matrix(amse, 1, dimnames = list(NULL, c("sbart","rsf","ph")))
 amse95 <- matrix(amse95, 1, dimnames = list(NULL, c("sbart","rsf","ph"))) }
 
-## Every spread reported here is an EMPIRICAL quantile over the replicates.
-## No standard deviation, no standard error, and no t (or normal) quantile is
-## used anywhere in version 7 -- not for AMSE, not for AES, and there is no
-## coverage to report.
+
 q_rep <- function(v, p) if (R > 1) as.numeric(quantile(v, p, na.rm = TRUE)) else NA_real_
 
 cat("=== AMSE of the estimated survival function (main text, Figure 2) ===\n")
@@ -53,9 +41,7 @@ Srsf  <- get("S_rsf_aes");  Sph <- get("S_ph_aes")
 if (R == 1) { d <- c(dim(res[[1]]$S_true_aes), 1)
 Strue <- array(Strue, d); Ssb <- array(Ssb, d)
 Srsf <- array(Srsf, d); Sph <- array(Sph, d) }
-## AES band = the 2.5% and 97.5% EMPIRICAL quantiles of the R replicate curves at
-## each plotting time -- the supplement's "95% pointwise band based on 100
-## replicates".  Not mean +/- t * SD.
+
 band <- function(Arr) {
   m  <- apply(Arr, c(1,2), mean, na.rm = TRUE)
   lo <- if (R > 1) apply(Arr, c(1,2), quantile, probs = 0.025, na.rm = TRUE) else m
@@ -100,13 +86,7 @@ fm <- file.path(rundir, sprintf("AMSE_%s_v%d", scen, vers))
 pdf(paste0(fm, ".pdf"), width = 6, height = 5); draw_amse(); invisible(dev.off())
 png(paste0(fm, ".png"), width = 1200, height = 1000, res = 170); draw_amse(); invisible(dev.off())
 
-################################################################################
-# Per-replicate 95% intervals.  Version 7 computes NO coverage; the intervals are
-# collected here and stored so that they can be used later.
-#   sbart      credible band, M_1 fixed at the panel's p0 (the AES functional)
-#   sbart_Mint credible band with M_1 drawn from p(M | D_0) -- the full 3-step one
-#   ph, rsf    nonparametric bootstrap confidence bands
-################################################################################
+
 if (!is.null(res[[1]]$own_width)) {
   wid <- c("sbart","sbart_Mint","rsf","ph")
   ow  <- t(sapply(res, function(x) x$own_width[wid]))
