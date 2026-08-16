@@ -17,10 +17,23 @@ lg <- function(...) { m <- paste0(format(Sys.time(), "%H:%M:%S"), " [rep ", rep_
                       cat(m, "\n", file = logf, append = TRUE); cat(m, "\n"); flush.console() }
 t_start <- Sys.time()
 
-make_A15 <- function() { N <- 15; A <- matrix(0, N, N)
-  for (i in 1:(N-1)) { A[i, i+1] <- 1; A[i+1, i] <- 1 }
-  A[1,3] <- A[3,1] <- 1; A[5,8] <- A[8,5] <- 1; A[7,10] <- A[10,7] <- 1
-  A[10,13] <- A[13,10] <- 1; A[12,15] <- A[15,12] <- 1; A }
+make_A15 <- function() {
+  cn <- c("Escambia","SantaRosa","Okaloosa","Walton","Holmes","Washington","Bay",
+          "Jackson","Calhoun","Gulf","Gadsden","Liberty","Franklin","Leon","Wakulla")
+  ed <- list(c("Escambia","SantaRosa"), c("SantaRosa","Okaloosa"), c("Okaloosa","Walton"),
+             c("Walton","Holmes"), c("Walton","Washington"), c("Walton","Bay"),
+             c("Holmes","Washington"), c("Holmes","Jackson"),
+             c("Washington","Jackson"), c("Washington","Calhoun"), c("Washington","Bay"),
+             c("Bay","Calhoun"), c("Bay","Gulf"),
+             c("Jackson","Calhoun"), c("Jackson","Gadsden"), c("Jackson","Liberty"),
+             c("Calhoun","Gulf"), c("Calhoun","Liberty"),
+             c("Gulf","Liberty"), c("Gulf","Franklin"),
+             c("Gadsden","Liberty"), c("Gadsden","Leon"),
+             c("Liberty","Franklin"), c("Liberty","Leon"), c("Liberty","Wakulla"),
+             c("Franklin","Wakulla"), c("Leon","Wakulla"))
+  A <- matrix(0, length(cn), length(cn), dimnames = list(cn, cn))
+  for (e in ed) { A[e[1], e[2]] <- 1; A[e[2], e[1]] <- 1 }
+  A }
 
 make_A10 <- function() { N <- 10; A <- matrix(0, N, N)
   for (e in list(c(1,2),c(2,3),c(3,4),c(4,5),c(4,7),c(5,6),c(5,8),

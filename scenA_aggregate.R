@@ -45,8 +45,7 @@ band <- function(Arr) {
   m <- apply(Arr, c(1,2), mean, na.rm = TRUE); s <- apply(Arr, c(1,2), sd, na.rm = TRUE)
   list(m = m, lo = clipm(m - tq*s, 0, 1), hi = clipm(m + tq*s, 0, 1)) }
 Bsb <- band(Ssb); Brsf <- band(Srsf); Bph <- band(Sph)
-Btrue <- band(Strue)
-Tm  <- Btrue$m
+Tm  <- apply(Strue, c(1,2), mean, na.rm = TRUE)
 
 labs <- c("x1=0.3,  M1=0.75", "x1=0.7,  M1=0.75", "x1=0.3,  M1=0.50", "x1=0.7,  M1=0.50")
 draw <- function() {
@@ -56,14 +55,12 @@ draw <- function() {
          main = labs[k], cex.main = 1)
     pb <- function(B, col) polygon(c(pt, rev(pt)), c(B$lo[k,], rev(B$hi[k,])),
                                    col = adjustcolor(col, 0.18), border = NA)
-    polygon(c(pt, rev(pt)), c(Btrue$lo[k,], rev(Btrue$hi[k,])),
-            col = adjustcolor("grey35", 0.16), border = NA)
     pb(Bsb, "forestgreen"); pb(Brsf, "red"); pb(Bph, "blue")
     lines(pt, Tm[k,],     col = "black", lwd = 3.2)
     lines(pt, Bsb$m[k,],  col = "forestgreen", lwd = 2)
     lines(pt, Brsf$m[k,], col = "red",   lwd = 2, lty = 2)
     lines(pt, Bph$m[k,],  col = "blue",  lwd = 2, lty = 4)
-    if (k == 1) legend("topright", c("mean true S (grey band = its spread)","spatial SBART","RSF","PH-frailty"),
+    if (k == 1) legend("topright", c("true S","spatial SBART","RSF","PH-frailty"),
                        col = c("black","forestgreen","red","blue"),
                        lty = c(1,1,2,4), lwd = 2, bty = "n", cex = 0.72)
   }
