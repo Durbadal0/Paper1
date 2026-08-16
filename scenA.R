@@ -4,7 +4,7 @@ rep_id   <- as.integer(args[1])
 outdir   <- if (length(args) >= 2) args[2] else "scenA_out"
 num_iter <- if (length(args) >= 3) as.integer(args[3]) else 10000
 burn_in  <- if (length(args) >= 4) as.integer(args[4]) else 3500
-num_tree <- if (length(args) >= 5) as.integer(args[5]) else 20
+num_tree <- if (length(args) >= 5) as.integer(args[5]) else 200
 scenario  <- if (length(args) >= 6) toupper(args[6]) else "A"
 use_step3 <- if (length(args) >= 7) as.integer(args[7]) else 0
 dir.create(outdir, showWarnings = FALSE, recursive = TRUE)
@@ -66,7 +66,7 @@ haz <- function(t, W, M, x1, x2, x3) {
   v <- ifelse(t < 2, g1(t,M,x1,x2,x3), ifelse(t < 6, g2(t,M,x1,x2,x3), g3(t,M,x1,x2,x3)))
   if (scenario == "B") { W^(1 + 0.2*t) * exp(v) } else { W * exp(v) } }
 
-FINE <- seq(0, 30, length.out = 3001); dFINE <- FINE[2] - FINE[1]
+FINE <- seq(0, 30, length.out = 6001); dFINE <- FINE[2] - FINE[1]
 cumH_fine <- function(W, M, x1, x2, x3) {
   h <- haz(FINE, W, M, x1, x2, x3)
   c(0, cumsum((h[-1] + h[-length(h)])/2 * dFINE)) }
@@ -165,7 +165,7 @@ if (!is.null(ph)) {
 car_ld <- function(x, rho, s2) {
   Q <- (D - rho * A); ev <- eigen(Q, only.values = TRUE, symmetric = TRUE)$values
   0.5 * (sum(log(pmax(ev, 1e-12))) - N * log(s2)) - 0.5 * as.numeric(t(x) %*% Q %*% x) / s2 }
-n1 <- 7000; b1 <- 3500
+n1 <- 12000; b1 <- 6000
 logitM <- qlogis((m_0 + 0.5)/(n_0i + 1)); s0 <- 1; rho0 <- 0
 Msave <- matrix(NA, n1, N)
 for (it in 1:n1) {
@@ -198,23 +198,30 @@ keep_lam <- keep_s1 <- keep_rho1 <- numeric(num_iter); keep_W <- matrix(NA, num_
 acc_R <- rep(0, N); acc_rho1 <- 0
 
 xfill <- matrix(0.5, 1, p - 3)
+tg0 <- c(0, tg); nT0 <- length(tg0)
+cumtrap <- function(P, h) {
+  m <- (P[, -1, drop = FALSE] + P[, -ncol(P), drop = FALSE]) / 2
+  t(apply(m, 1, cumsum)) * h }
 amse_blocks <- lapply(1:N, function(i) {
   bx <- cbind(xp, xfill[rep(1, nXP), , drop = FALSE])
-  cbind(rep(tg, each = nXP)/max_time, M_hat[i], bx[rep(1:nXP, times = nT), ]) })
+  cbind(rep(tg0, each = nXP)/max_time, M_hat[i], bx[rep(1:nXP, times = nT0), ]) })
+pt0 <- c(0, pt); nPT0 <- length(pt0)
 aes_block <- do.call(rbind, lapply(aes_cases, function(a)
-  cbind(pt/max_time, a["p0"], a["x1"], 0.5, 0.5, xfill[rep(1, nPT), , drop = FALSE])))
+  cbind(pt0/max_time, a["p0"], a["x1"], 0.5, 0.5, xfill[rep(1, nPT0), , drop = FALSE])))
 cov_nrowg <- nCX * nCM
 cov_block <- {
   base <- cbind(cxp, xfill[rep(1, nCX), , drop = FALSE])
   gr <- expand.grid(r = 1:nCX, j = 1:nCM)
-  gi <- rep(1:cov_nrowg, times = nT)
-  cbind(rep(tg, each = cov_nrowg)/max_time, cM[gr$j][gi], base[gr$r, ][gi, , drop = FALSE]) }
+  gi <- rep(1:cov_nrowg, times = nT0)
+  cbind(rep(tg0, each = cov_nrowg)/max_time, cM[gr$j][gi], base[gr$r, ][gi, , drop = FALSE]) }
 
 S_amse_sum <- array(0, c(N, nXP, nT)); S_aes_sum <- matrix(0, 4, nPT)
 S_cov_sum  <- array(0, c(nCX, nCM, nCT)); n_acc <- 0
-THIN <- 10
+KEEP_EVERY  <- 5
+S_cov_draws <- array(NA_real_, c(nCX * nCM, nCT, 500)); lw_draws <- numeric(500); n_draw <- 0
+THIN <- 3
 sumw <- 0; maxlw <- -Inf; lw_all <- c(); w_lam <- 0; w_W <- rep(0, N)
-NQ <- 20; qw <- (seq_len(NQ) - 0.5)/NQ
+NQ <- 50; qw <- (seq_len(NQ) - 0.5)/NQ
 q_rows  <- rep(1:nt, times = NQ)
 Xq_base <- cbind(as.numeric(outer(sd_df$time, qw))/max_time, 0, X[q_rows, , drop = FALSE])
 Xy_base <- cbind(sd_df$time/max_time, 0, X)
@@ -282,15 +289,17 @@ for (iter in 1:num_iter) {
     dt <- tg[1]
     clip01 <- function(m) { m[m < 0] <- 0; m[m > 1] <- 1; m }
     for (i in 1:N) {
-      ph_i <- matrix(pnorm(forest$do_predict(amse_blocks[[i]])), nXP, nT)
+      ph_i <- matrix(pnorm(forest$do_predict(amse_blocks[[i]])), nXP, nT0)
       S_amse_sum[i, , ] <- S_amse_sum[i, , ] +
-        w * clip01(exp(-lambda0 * Wv[i] * t(apply(ph_i, 1, cumsum)) * dt))
+        w * clip01(exp(-lambda0 * Wv[i] * cumtrap(ph_i, dt)))
     }
-    ph_a <- matrix(pnorm(forest$do_predict(aes_block)), nPT, 4)
-    S_aes_sum <- S_aes_sum + w * clip01(exp(-lambda0 * Wv[1] * t(apply(t(ph_a), 1, cumsum)) * dtp))
-    ph_c <- matrix(pnorm(forest$do_predict(cov_block)), cov_nrowg, nT)
-    S_c  <- clip01(exp(-lambda0 * Wv[1] * t(apply(ph_c, 1, cumsum)) * dt))
+    ph_a <- matrix(pnorm(forest$do_predict(aes_block)), nPT0, 4)
+    S_aes_sum <- S_aes_sum + w * clip01(exp(-lambda0 * Wv[1] * cumtrap(t(ph_a), dtp)))
+    ph_c <- matrix(pnorm(forest$do_predict(cov_block)), cov_nrowg, nT0)
+    S_c  <- clip01(exp(-lambda0 * Wv[1] * cumtrap(ph_c, dt)))
     S_cov_sum <- S_cov_sum + w * array(S_c[, ct_idx], c(nCX, nCM, nCT))
+    if (n_acc %% KEEP_EVERY == 0 && n_draw < 500) {
+      n_draw <- n_draw + 1; S_cov_draws[, , n_draw] <- S_c[, ct_idx]; lw_draws[n_draw] <- lw }
   }
   if (iter %% 1000 == 0) lg(sprintf("iter %5d  lam0=%.3f s1=%.2f rho1=%.2f accR=%.2f accRho=%.2f (%.1f min)",
       iter, lambda0, s1, rho1, mean(acc_R)/iter, acc_rho1/iter,
@@ -335,7 +344,66 @@ for (j in 1:nCM) {
   }
 }
 
-saveRDS(list(rep_id = rep_id, seed = 20260814 + rep_id, scenario = scenario,
+lg("computing intervals: SBART credible band")
+Wt <- exp(lw_draws[1:n_draw] - max(lw_draws[1:n_draw]))
+wq <- function(v) { o <- order(v); cw <- cumsum(Wt[o])/sum(Wt)
+                    c(v[o][which(cw >= 0.025)[1]], v[o][which(cw >= 0.975)[1]]) }
+qq <- apply(S_cov_draws[, , 1:n_draw, drop = FALSE], c(1, 2), wq)
+sb_lo <- array(qq[1, , ], c(nCX, nCM, nCT)); sb_hi <- array(qq[2, , ], c(nCX, nCM, nCT))
+
+lg("computing intervals: PH bootstrap")
+NB_PH <- 500
+gridX <- as.data.frame(cbind(xcov[rep(1:nCX, times = nCM), ], rep(cM, each = nCX)))
+names(gridX) <- c(paste0("x", 1:p), "M")
+Xg <- as.matrix(gridX[, paste0("x", 1:p)])
+ph_draws <- array(NA_real_, c(nCX * nCM, nCT, NB_PH))
+for (b in 1:NB_PH) {
+  db <- ph_dat[sample.int(nt, nt, replace = TRUE), ]
+  fb <- tryCatch(coxph(ph_fml, data = db), error = function(e) NULL)
+  if (is.null(fb)) next
+  bb <- coef(fb); bb[is.na(bb)] <- 0
+  frb  <- fb$frail
+  frbv <- if (!is.null(frb) && length(frb) == N) as.numeric(frb) else rep(0, N)
+  lpb <- as.numeric(as.matrix(db[, paste0("x", 1:p)]) %*% bb[paste0("x", 1:p)]) +
+         bb["M"] * db$M + frbv[db$county]
+  ob <- order(db$time); tb <- db$time[ob]; dbo <- db$delta[ob]; rb <- exp(lpb)[ob]
+  arb <- rev(cumsum(rev(rb))); etb <- unique(tb[dbo == 1])
+  if (length(etb) < 2) next
+  dkb <- as.numeric(table(factor(tb[dbo == 1], levels = etb)))
+  H0b <- approx(etb, cumsum(dkb / arb[match(etb, tb)]), xout = ct,
+                method = "constant", rule = 2, f = 0, ties = "ordered")$y
+  lpg <- as.numeric(Xg %*% bb[paste0("x", 1:p)]) + bb["M"] * gridX$M
+  ph_draws[, , b] <- exp(-exp(frbv[1]) * outer(exp(lpg), H0b))
+  if (b %% 100 == 0) lg(sprintf("  PH bootstrap %d/%d", b, NB_PH))
+}
+ph_lo <- array(apply(ph_draws, c(1,2), quantile, probs = 0.025, na.rm = TRUE), c(nCX, nCM, nCT))
+ph_hi <- array(apply(ph_draws, c(1,2), quantile, probs = 0.975, na.rm = TRUE), c(nCX, nCM, nCT))
+
+lg("computing intervals: RSF bootstrap")
+NB_RSF <- 500; NT_B <- 250
+rsf_draws <- array(NA_real_, c(nCX * nCM, nCT, NB_RSF))
+for (b in 1:NB_RSF) {
+  fb <- tryCatch(ranger(Surv(time, delta) ~ ., data = rsf_df[sample.int(nt, nt, replace = TRUE), ],
+                        num.trees = NT_B, min.node.size = 15, seed = 1000*rep_id + b,
+                        num.threads = 1), error = function(e) NULL)
+  if (is.null(fb)) next
+  pb <- tryCatch(predict(fb, data = gridX, num.threads = 1), error = function(e) NULL)
+  if (is.null(pb)) next
+  rsf_draws[, , b] <- t(apply(pb$survival, 1, function(v)
+                        approx(pb$unique.death.times, v, xout = ct, rule = 2)$y))
+  if (b %% 100 == 0) lg(sprintf("  RSF bootstrap %d/%d", b, NB_RSF))
+}
+rsf_lo <- array(apply(rsf_draws, c(1,2), quantile, probs = 0.025, na.rm = TRUE), c(nCX, nCM, nCT))
+rsf_hi <- array(apply(rsf_draws, c(1,2), quantile, probs = 0.975, na.rm = TRUE), c(nCX, nCM, nCT))
+
+own_wid <- c(sbart = mean(sb_hi - sb_lo, na.rm = TRUE), ph = mean(ph_hi - ph_lo, na.rm = TRUE),
+             rsf = mean(rsf_hi - rsf_lo, na.rm = TRUE))
+lg(sprintf("interval widths: SBART=%.4f PH=%.4f RSF=%.4f",
+           own_wid["sbart"], own_wid["ph"], own_wid["rsf"]))
+
+saveRDS(list(rep_id = rep_id, seed = 20260814 + rep_id,
+  own_width = own_wid, n_draw = n_draw,
+  sb_lo = sb_lo, sb_hi = sb_hi, ph_lo = ph_lo, ph_hi = ph_hi, rsf_lo = rsf_lo, rsf_hi = rsf_hi, scenario = scenario,
   version = if (use_step3) 3 else 2, ess_step3 = ess, n_acc = n_acc,
   logw_sd = if (length(lw_all)) sd(lw_all) else NA,
   n = nt, events = sum(delta), cens_frac = mean(delta == 0),
