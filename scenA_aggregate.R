@@ -1,13 +1,12 @@
-rundir <- if (length(commandArgs(TRUE)) >= 1) commandArgs(TRUE)[1] else "scenA_v7_replication"
+rundir <- if (length(commandArgs(TRUE)) >= 1) commandArgs(TRUE)[1] else "scenA_out"
 fs  <- sort(list.files(rundir, pattern = "^rep[0-9]+\\.rds$", full.names = TRUE))
 res <- lapply(fs, readRDS)
 R   <- length(res)
 scen <- if (!is.null(res[[1]]$scenario)) res[[1]]$scenario else "A"
 
-alg  <- if (!is.null(res[[1]]$version)) res[[1]]$version else 2
-vers <- 7
+alg  <- if (!is.null(res[[1]]$n_steps)) res[[1]]$n_steps else if (!is.null(res[[1]]$sbM_lo)) 3L else 2L
 ntree <- if (is.null(res[[1]]$num_tree)) NA_integer_ else res[[1]]$num_tree
-cat(sprintf("SCENARIO %s | code version 7 | %d-step algorithm | %d replicate%s | K = %s trees\n",
+cat(sprintf("SCENARIO %s | %d-step algorithm | %d replicate%s | K = %s trees\n",
             scen, alg, R, if (R == 1) "" else "s", ntree))
 if (!is.null(res[[1]]$settings)) {
   s0 <- res[[1]]$settings
@@ -78,7 +77,7 @@ draw_aes <- function() {
                        lty = c(1,1,2,4), lwd = 2, bty = "n", cex = 0.8)
   }
 }
-fa <- file.path(rundir, sprintf("AES_%s_v%d", scen, vers))
+fa <- file.path(rundir, sprintf("AES_%s", scen))
 pdf(paste0(fa, ".pdf"), width = 8.5, height = 7); draw_aes(); invisible(dev.off())
 png(paste0(fa, ".png"), width = 1700, height = 1400, res = 170); draw_aes(); invisible(dev.off())
 
@@ -88,7 +87,7 @@ draw_amse <- function() {
           col = c("grey95","grey80","grey55"), boxwex = 0.55, ylab = "AMSE",
           main = sprintf("Scenario %s (%d replicates)", scen, R))
 }
-fm <- file.path(rundir, sprintf("AMSE_%s_v%d", scen, vers))
+fm <- file.path(rundir, sprintf("AMSE_%s", scen))
 pdf(paste0(fm, ".pdf"), width = 6, height = 5); draw_amse(); invisible(dev.off())
 png(paste0(fm, ".png"), width = 1200, height = 1000, res = 170); draw_amse(); invisible(dev.off())
 

@@ -426,7 +426,7 @@ saveRDS(list(rep_id = rep_id, seed = 20260814 + rep_id, num_tree = num_tree,
              own_width = own_wid, n_keep = n_keep, ess_weights = ess_w,
              sb_lo = sb_lo, sb_hi = sb_hi, sbM_lo = sbM_lo, sbM_hi = sbM_hi,
              ph_lo = ph_lo, ph_hi = ph_hi, rsf_lo = rsf_lo, rsf_hi = rsf_hi, scenario = scenario,
-             version = if (use_step3) 3 else 2, ess_step3 = ess, n_acc = n_acc,
+             n_steps = if (use_step3) 3L else 2L, ess_step3 = ess, n_acc = n_acc,
              logw_sd = if (length(lw_all)) sd(lw_all) else NA,
              n = nt, events = sum(delta), cens_frac = mean(delta == 0),
              amse = c(sbart = amse_sbart, rsf = amse_rsf, ph = amse_ph),
@@ -447,6 +447,6 @@ saveRDS(list(rep_id = rep_id, seed = 20260814 + rep_id, num_tree = num_tree,
              minutes = as.numeric(difftime(Sys.time(), t_start, units = "mins"))),
         file.path(outdir, sprintf("rep%02d.rds", rep_id)))
 
-lg(sprintf("DONE  scen %s v%d  AMSE: SBART=%.5f RSF=%.5f PH=%.5f | ESS=%.1f | %.1f min",
-           scenario, if (use_step3) 3 else 2, amse_sbart, amse_rsf, amse_ph, ess,
+lg(sprintf("DONE  scen %s (%d-step)  AMSE: SBART=%.5f RSF=%.5f PH=%.5f | ESS=%.1f | %.1f min",
+           scenario, if (use_step3) 3L else 2L, amse_sbart, amse_rsf, amse_ph, ess,
            as.numeric(difftime(Sys.time(), t_start, units = "mins"))))
