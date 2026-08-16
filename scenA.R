@@ -336,9 +336,7 @@ for (iter in 1:num_iter) {
     ## store the raw draw and its log weight for the credible band
     n_keep <- n_keep + 1
     S_aes_draws[, , n_keep] <- S_a; lw_keep[n_keep] <- lw
-    ## the same curve with county 1's screening rate DRAWN from p(M | D_0) --
-    ## paired with the Step-3 weight computed from that very draw, so the pair
-    ## (M^(b), Theta^(b)) with weight w_b is a draw from the exact joint posterior
+    
     if (use_step3 == 1) {
       aesM <- aesM_base; aesM[, 2] <- Mdraw[1]
       ph_aM <- matrix(pnorm(forest$do_predict(aesM)), nPT0, 4)
@@ -387,9 +385,7 @@ lg("intervals: SBART weighted credible band")
 lwk   <- lw_keep[1:n_keep]
 Wt    <- exp(lwk - max(lwk))               # Step-3 weights; all 1 when step3 = 0
 ess_w <- sum(Wt)^2 / sum(Wt^2)             # what certifies the weighted band
-## weighted quantile = inverse of the weighted empirical distribution function,
-## which is the correct posterior quantile under self-normalised importance
-## sampling.  With all weights equal it reduces to the ordinary quantile.
+
 wquant <- function(v, w, probs = c(0.025, 0.975)) {
   o <- order(v); cw <- cumsum(w[o])/sum(w)
   vapply(probs, function(pp) v[o][which(cw >= pp)[1]], numeric(1)) }
@@ -455,10 +451,7 @@ lg(sprintf("interval widths: SBART=%.4f (M-integrated %.4f) PH=%.4f RSF=%.4f",
            own_wid["sbart"], own_wid["sbart_Mint"], own_wid["ph"], own_wid["rsf"]))
 
 saveRDS(list(rep_id = rep_id, seed = 20260814 + rep_id, num_tree = num_tree,
-             ## --- per-replicate 95% intervals on the AES grid (4 panels x 100 times) ---
-             ##  sb_*   : SBART credible band, M_1 fixed at the panel's p0 (AES functional)
-             ##  sbM_*  : SBART credible band with M_1 drawn from p(M | D_0)  [step 3 only]
-             ##  ph_*, rsf_* : bootstrap confidence bands
+            
              own_width = own_wid, n_keep = n_keep, ess_weights = ess_w,
              sb_lo = sb_lo, sb_hi = sb_hi, sbM_lo = sbM_lo, sbM_hi = sbM_hi,
              ph_lo = ph_lo, ph_hi = ph_hi, rsf_lo = rsf_lo, rsf_hi = rsf_hi, scenario = scenario,

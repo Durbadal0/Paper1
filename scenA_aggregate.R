@@ -73,9 +73,7 @@ fa <- file.path(rundir, sprintf("AES_%s_v%d", scen, vers))
 pdf(paste0(fa, ".pdf"), width = 8.5, height = 7); draw_aes(); invisible(dev.off())
 png(paste0(fa, ".png"), width = 1700, height = 1400, res = 170); draw_aes(); invisible(dev.off())
 
-## Boxplot of the R per-replicate AMSE values themselves: the box is the
-## replicate quartiles and the whiskers the replicate range, so the display is
-## purely empirical -- nothing is drawn from a fitted normal or t.
+
 draw_amse <- function() {
   par(mar = c(3.4,4.4,2.0,1))
   boxplot(list(`spatial SBART` = amse[,"sbart"], RSF = amse[,"rsf"], `PH-frailty` = amse[,"ph"]),
