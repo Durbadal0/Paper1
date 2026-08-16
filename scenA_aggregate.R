@@ -7,8 +7,16 @@ scen <- if (!is.null(res[[1]]$scenario)) res[[1]]$scenario else "A"
 alg  <- if (!is.null(res[[1]]$version)) res[[1]]$version else 2
 vers <- 7
 ntree <- if (is.null(res[[1]]$num_tree)) NA_integer_ else res[[1]]$num_tree
-cat(sprintf("SCENARIO %s | code version 7 | %d-step algorithm | %d replicate%s | K = %s trees\n\n",
+cat(sprintf("SCENARIO %s | code version 7 | %d-step algorithm | %d replicate%s | K = %s trees\n",
             scen, alg, R, if (R == 1) "" else "s", ntree))
+if (!is.null(res[[1]]$settings)) {
+  s0 <- res[[1]]$settings
+  cat(sprintf("settings: %d iterations, %d burn-in, THIN %d, NQ %d, fine grid %d,\n",
+              s0["num_iter"], s0["burn_in"], s0["THIN"], s0["NQ"], s0["FINE_N"]))
+  cat(sprintf("          bootstraps PH/RSF %d/%d, RSF trees fit/bootstrap %d/%d\n",
+              s0["NB_PH"], s0["NB_RSF"], s0["RSF_TREES"], s0["NT_B"]))
+}
+cat("\n")
 
 nm <- c(sbart = "spatial SBART", rsf = "RSF", ph = "PH-frailty")
 
@@ -89,9 +97,11 @@ if (!is.null(res[[1]]$own_width)) {
   ow  <- t(sapply(res, function(x) x$own_width[wid]))
   if (R == 1) ow <- matrix(ow, 1, dimnames = list(NULL, wid))
   colnames(ow) <- wid
+  st <- res[[1]]$settings
+  nb <- if (is.null(st)) "" else sprintf(" (%d and %d resamples)", st["NB_PH"], st["NB_RSF"])
   cat("\n=== each method's own 95% pointwise interval on the AES grid ===\n")
   cat("SBART: posterior credible band (Step-3 weighted quantiles of the retained\n")
-  cat("draws).  RSF, PH: nonparametric bootstrap confidence bands (500 resamples).\n")
+  cat(sprintf("draws).  PH, RSF: nonparametric bootstrap confidence bands%s.\n", nb))
   cat("No t distribution and no standard error is used; coverage is not computed.\n\n")
   cat(sprintf("%-26s %10s %10s %10s %10s\n", "mean width over the grid",
               "mean", "median", "2.5%", "97.5%"))

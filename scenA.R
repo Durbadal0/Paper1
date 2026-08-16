@@ -419,6 +419,10 @@ lg(sprintf("interval widths: SBART=%.4f (M-integrated %.4f) PH=%.4f RSF=%.4f",
 
 saveRDS(list(rep_id = rep_id, seed = 20260814 + rep_id, num_tree = num_tree,
              
+             settings = c(num_iter = num_iter, burn_in = burn_in, num_tree = num_tree,
+                          THIN = THIN, NQ = NQ, FINE_N = FINE_N, NB_PH = NB_PH,
+                          NB_RSF = NB_RSF, NT_B = NT_B, RSF_TREES = RSF_TREES),
+             
              own_width = own_wid, n_keep = n_keep, ess_weights = ess_w,
              sb_lo = sb_lo, sb_hi = sb_hi, sbM_lo = sbM_lo, sbM_hi = sbM_hi,
              ph_lo = ph_lo, ph_hi = ph_hi, rsf_lo = rsf_lo, rsf_hi = rsf_hi, scenario = scenario,
