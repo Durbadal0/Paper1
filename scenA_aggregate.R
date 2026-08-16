@@ -36,12 +36,11 @@ Srsf  <- get("S_rsf_aes");  Sph <- get("S_ph_aes")
 if (R == 1) { d <- c(dim(res[[1]]$S_true_aes), 1)
               Strue <- array(Strue, d); Ssb <- array(Ssb, d)
               Srsf <- array(Srsf, d); Sph <- array(Sph, d) }
-tq <- if (R > 1) qt(0.975, R - 1) else 0
-clipm <- function(m, a, b) { m[m < a] <- a; m[m > b] <- b; m }
 band <- function(Arr) {
-  m <- apply(Arr, c(1,2), mean, na.rm = TRUE)
-  s <- if (R > 1) apply(Arr, c(1,2), sd, na.rm = TRUE) else 0 * m
-  list(m = m, lo = clipm(m - tq*s, 0, 1), hi = clipm(m + tq*s, 0, 1)) }
+  m  <- apply(Arr, c(1,2), mean, na.rm = TRUE)
+  lo <- if (R > 1) apply(Arr, c(1,2), quantile, probs = 0.025, na.rm = TRUE) else m
+  hi <- if (R > 1) apply(Arr, c(1,2), quantile, probs = 0.975, na.rm = TRUE) else m
+  list(m = m, lo = lo, hi = hi) }
 Bsb <- band(Ssb); Brsf <- band(Srsf); Bph <- band(Sph)
 Tm  <- apply(Strue, c(1,2), mean, na.rm = TRUE)
 
