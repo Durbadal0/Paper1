@@ -5,7 +5,7 @@ outdir   <- if (length(args) >= 2) args[2] else "scenA_out"
 num_iter <- if (length(args) >= 3) as.integer(args[3]) else 10000
 burn_in  <- if (length(args) >= 4) as.integer(args[4]) else 3500
 num_tree <- if (length(args) >= 5) as.integer(args[5]) else 200
-scenario  <- if (length(args) >= 6) toupper(args[6]) else "A"
+scenario  <- if (length(args) >= 6) toupper(args[6]) else "C"
 use_step3 <- if (length(args) >= 7) as.integer(args[7]) else 0
 
 argn <- function(k, d) if (length(args) >= k && nzchar(args[k])) as.integer(args[k]) else d
@@ -19,11 +19,11 @@ RSF_TREES <- argn(14, 1000)
 dir.create(outdir, showWarnings = FALSE, recursive = TRUE)
 
 suppressMessages({library(SoftBart); library(MASS); library(truncnorm)
-  library(survival); library(ranger)})
+                  library(survival); library(ranger)})
 
 logf <- file.path(outdir, sprintf("rep%02d.log", rep_id))
 lg <- function(...) { m <- paste0(format(Sys.time(), "%H:%M:%S"), " [rep ", rep_id, "] ", ...)
-cat(m, "\n", file = logf, append = TRUE); cat(m, "\n"); flush.console() }
+                      cat(m, "\n", file = logf, append = TRUE); cat(m, "\n"); flush.console() }
 t_start <- Sys.time()
 
 make_A15 <- function() {
@@ -45,9 +45,9 @@ make_A15 <- function() {
   A }
 
 make_A10 <- function() { N <- 10; A <- matrix(0, N, N)
-for (e in list(c(1,2),c(2,3),c(3,4),c(4,5),c(4,7),c(5,6),c(5,8),
-               c(6,7),c(6,8),c(6,9),c(7,9),c(7,10),c(8,9),c(9,10)))
-{ A[e[1],e[2]] <- 1; A[e[2],e[1]] <- 1 }; A }
+  for (e in list(c(1,2),c(2,3),c(3,4),c(4,5),c(4,7),c(5,6),c(5,8),
+                 c(6,7),c(6,8),c(6,9),c(7,9),c(7,10),c(8,9),c(9,10)))
+    { A[e[1],e[2]] <- 1; A[e[2],e[1]] <- 1 }; A }
 
 if (scenario == "D") {
   A <- make_A10(); n_i <- c(80,100,120,100,80,120,80,100,120,100)
@@ -70,7 +70,7 @@ g2 <- function(t,M,x1,x2,x3) 0.35*t*x1*x2*x3*M + 0.25*t*M^2 + 0.20*x1*M + 0.15*M
 g3 <- function(t,M,x1,x2,x3) 0.30*log(t+1)*x1*x2*x3*M + 0.25*t*x2*x3 + 0.20*M^2
 
 g4 <- function(t,M,x1,x2,x3) 0.5*t*x1*x2 + 0.3*t*M*x1 + 0.15*M^2 +
-  0.08*t^2*x1*x2*x3 + 0.3*t*x2*x3*M + 0.4*sqrt(x3)*M*t
+                             0.08*t^2*x1*x2*x3 + 0.3*t*x2*x3*M + 0.4*sqrt(x3)*M*t
 haz <- function(t, W, M, x1, x2, x3) {
   if (scenario == "D") return(W * pnorm(g4(t,M,x1,x2,x3)))
   v <- ifelse(t < 2, g1(t,M,x1,x2,x3), ifelse(t < 6, g2(t,M,x1,x2,x3), g3(t,M,x1,x2,x3)))
@@ -153,9 +153,9 @@ if (!is.null(ph)) {
   frail  <- ph$frail
   frailv <- if (!is.null(frail) && length(frail) == N) as.numeric(frail) else rep(0, N)
   W_ph   <- exp(frailv)
-  
+
   lp_dat <- as.numeric(as.matrix(ph_dat[, paste0("x", 1:p)]) %*% bph[paste0("x", 1:p)]) +
-    bph["M"] * ph_dat$M + frailv[ph_dat$county]
+            bph["M"] * ph_dat$M + frailv[ph_dat$county]
   o   <- order(ph_dat$time)
   tso <- ph_dat$time[o]; dso <- ph_dat$delta[o]; rso <- exp(lp_dat)[o]
   atrisk <- rev(cumsum(rev(rso)))
@@ -179,7 +179,7 @@ for (it in 1:n1) {
   for (i in 1:N) {
     prop <- logitM; prop[i] <- rnorm(1, logitM[i], 0.3)
     la <- (car_ld(prop, rho0, s0) + dbinom(m_0[i], n_0i[i], plogis(prop[i]), log = TRUE)) -
-      (car_ld(logitM, rho0, s0) + dbinom(m_0[i], n_0i[i], plogis(logitM[i]), log = TRUE))
+          (car_ld(logitM, rho0, s0) + dbinom(m_0[i], n_0i[i], plogis(logitM[i]), log = TRUE))
     if (is.finite(la) && log(runif(1)) < la) logitM <- prop
   }
   qf <- as.numeric(t(logitM) %*% (D - rho0 * A) %*% logitM)
@@ -233,14 +233,14 @@ q_rows  <- rep(1:nt, times = NQ)
 Xq_base <- cbind(as.numeric(outer(sd_df$time, qw))/max_time, 0, X[q_rows, , drop = FALSE])
 Xy_base <- cbind(sd_df$time/max_time, 0, X)
 rescale_all <- function(f) { S_amse_sum <<- S_amse_sum*f; S_aes_sum <<- S_aes_sum*f
-w_lam <<- w_lam*f; w_W <<- w_W*f; w_rho1 <<- w_rho1*f; w_s1 <<- w_s1*f
-sumw <<- sumw*f }
+  w_lam <<- w_lam*f; w_W <<- w_W*f; w_rho1 <<- w_rho1*f; w_s1 <<- w_s1*f
+  sumw <<- sumw*f }
 
 d_cnt <- tabulate(cty[delta == 1], nbins = N)
 sy    <- as.numeric(tapply(sd_df$time, factor(cty, levels = 1:N), sum))
 
 for (iter in 1:num_iter) {
-  
+
   rates <- lambda0 * Wv[cty] * sd_df$time
   q <- rpois(nt, pmax(rates, 1e-8))
   idx <- which(q > 0)
@@ -259,17 +259,17 @@ for (iter in 1:num_iter) {
   Yall <- c(rep(0, if (is.null(Xaug)) 0 else nrow(Xaug)), rep(1, length(ev_idx)))
   bcur <- forest$do_predict(Xall)
   Z <- ifelse(Yall == 1, rtruncnorm(length(Yall), a = 0, b = Inf, mean = bcur, sd = 1),
-              rtruncnorm(length(Yall), a = -Inf, b = 0, mean = bcur, sd = 1))
+                         rtruncnorm(length(Yall), a = -Inf, b = 0, mean = bcur, sd = 1))
   forest$do_gibbs(Xall, Z, Xall, 1)
-  
+
   lambda0 <- rgamma(1, 1 + sum(delta) + sum(m_cnt), 1 + sum(Wv[cty] * sd_df$time))
-  
+
   qf <- as.numeric(t(Rv) %*% (D - rho1 * A) %*% Rv)
   s1 <- 1/rgamma(1, 1 + N/2, 1 + qf/2)
-  
+
   rp <- runif(1, max(rho_bounds[1], rho1 - 0.05), min(rho_bounds[2], rho1 + 0.05))
   if (log(runif(1)) < car_ld(Rv, rp, s1) - car_ld(Rv, rho1, s1)) { rho1 <- rp; acc_rho1 <- acc_rho1 + 1 }
-  
+
   for (c2 in 1:N) {
     Rp <- Rv; Rp[c2] <- rnorm(1, Rv[c2], 0.2)
     llp <- (d_cnt[c2] + m_cnt[c2]) * Rp[c2] - lambda0 * exp(Rp[c2]) * sy[c2]
@@ -279,7 +279,7 @@ for (iter in 1:num_iter) {
   }
   Wv <- exp(Rv)
   keep_lam[iter] <- lambda0; keep_s1[iter] <- s1; keep_rho1[iter] <- rho1; keep_W[iter, ] <- Wv
-  
+
   if (iter > burn_in && iter %% THIN == 0) {
     lw <- 0
     if (use_step3 == 1) {
@@ -310,10 +310,10 @@ for (iter in 1:num_iter) {
     ph_a <- matrix(pnorm(forest$do_predict(aes_block)), nPT0, 4)
     S_a  <- clip01(exp(-lambda0 * Wv[1] * cumtrap(t(ph_a), dtp)))
     S_aes_sum <- S_aes_sum + w * S_a
-    
+
     n_keep <- n_keep + 1
     S_aes_draws[, , n_keep] <- S_a; lw_keep[n_keep] <- lw
-    
+
     if (use_step3 == 1) {
       aesM <- aesM_base; aesM[, 2] <- Mdraw[1]
       ph_aM <- matrix(pnorm(forest$do_predict(aesM)), nPT0, 4)
@@ -321,14 +321,14 @@ for (iter in 1:num_iter) {
     }
   }
   if (iter %% 1000 == 0) lg(sprintf("iter %5d  lam0=%.3f s1=%.2f rho1=%.2f accR=%.2f accRho=%.2f (%.1f min)",
-                                    iter, lambda0, s1, rho1, mean(acc_R)/iter, acc_rho1/iter,
-                                    as.numeric(difftime(Sys.time(), t_start, units = "mins"))))
+      iter, lambda0, s1, rho1, mean(acc_R)/iter, acc_rho1/iter,
+      as.numeric(difftime(Sys.time(), t_start, units = "mins"))))
 }
 
 S_sb_amse <- S_amse_sum/sumw; S_sb_aes <- S_aes_sum/sumw
 W_hat <- if (use_step3 == 1) w_W/sumw else colMeans(keep_W[(burn_in+1):num_iter, ])
 ess   <- if (use_step3 == 1 && length(lw_all) > 0) {
-  lwc <- lw_all - max(lw_all); ww <- exp(lwc); sum(ww)^2/sum(ww^2) } else n_acc
+           lwc <- lw_all - max(lw_all); ww <- exp(lwc); sum(ww)^2/sum(ww^2) } else n_acc
 
 amse_of <- function(Sest, k = 1:nT)
   mean(sapply(1:N, function(i) mean((S_true_amse[i,,k] - Sest[i,,k])^2)))
@@ -383,7 +383,7 @@ for (b in 1:NB_PH) {
   frb  <- fb$frail
   frbv <- if (!is.null(frb) && length(frb) == N) as.numeric(frb) else rep(0, N)
   lpb <- as.numeric(as.matrix(db[, paste0("x", 1:p)]) %*% bb[paste0("x", 1:p)]) +
-    bb["M"] * db$M + frbv[db$county]
+         bb["M"] * db$M + frbv[db$county]
   ob <- order(db$time); tb <- db$time[ob]; dbo <- db$delta[ob]; rb <- exp(lpb)[ob]
   arb <- rev(cumsum(rev(rb))); etb <- unique(tb[dbo == 1])
   if (length(etb) < 2) next
@@ -407,7 +407,7 @@ for (b in 1:NB_RSF) {
   pb <- tryCatch(predict(fb, data = gridX, num.threads = 1), error = function(e) NULL)
   if (is.null(pb)) next
   rsf_draws[, , b] <- t(apply(pb$survival, 1, function(v)
-    approx(pb$unique.death.times, v, xout = pt, rule = 2)$y))
+                        approx(pb$unique.death.times, v, xout = pt, rule = 2)$y))
   if (b %% 100 == 0) lg(sprintf("  RSF bootstrap %d/%d", b, NB_RSF))
 }
 rsf_lo <- apply(rsf_draws, c(1,2), quantile, probs = 0.025, na.rm = TRUE)
@@ -421,34 +421,34 @@ lg(sprintf("interval widths: SBART=%.4f (M-integrated %.4f) PH=%.4f RSF=%.4f",
            own_wid["sbart"], own_wid["sbart_Mint"], own_wid["ph"], own_wid["rsf"]))
 
 saveRDS(list(rep_id = rep_id, seed = 20260814 + rep_id, num_tree = num_tree,
-             
-             settings = c(num_iter = num_iter, burn_in = burn_in, num_tree = num_tree,
-                          THIN = THIN, NQ = NQ, FINE_N = FINE_N, NB_PH = NB_PH,
-                          NB_RSF = NB_RSF, NT_B = NT_B, RSF_TREES = RSF_TREES),
-             
-             own_width = own_wid, n_keep = n_keep, ess_weights = ess_w, logw = lwk,
-             sb_lo = sb_lo, sb_hi = sb_hi, sbM_lo = sbM_lo, sbM_hi = sbM_hi,
-             ph_lo = ph_lo, ph_hi = ph_hi, rsf_lo = rsf_lo, rsf_hi = rsf_hi, scenario = scenario,
-             n_steps = if (use_step3) 3L else 2L, ess_step3 = ess, n_acc = n_acc,
-             logw_sd = if (length(lw_all)) sd(lw_all) else NA,
-             n = nt, events = sum(delta), cens_frac = mean(delta == 0),
-             amse = c(sbart = amse_sbart, rsf = amse_rsf, ph = amse_ph),
-             amse_t95 = c(sbart = amse_of(S_sb_amse, idx95),
-                          rsf = if (!is.null(rsf)) amse_of(S_rsf_amse, idx95) else NA,
-                          ph  = if (!is.null(ph))  amse_of(S_ph_amse,  idx95) else NA),
-             t95 = as.numeric(quantile(sd_df$time, 0.95)),
-             cor_M_bayes = cor(M_true, M_hat), cor_M_naive = cor(M_true, Mplug),
-             cor_W = cor(W_true, W_hat), W_true = W_true, W_hat = W_hat,
-             M_true = M_true, M_hat = M_hat, M_plug = Mplug,
-             rho1_post = if (use_step3 == 1) w_rho1/sumw else mean(keep_rho1[(burn_in+1):num_iter]),
-             s1_post = if (use_step3 == 1) w_s1/sumw else mean(keep_s1[(burn_in+1):num_iter]),
-             lam0_post = if (use_step3 == 1) w_lam/sumw else mean(keep_lam[(burn_in+1):num_iter]),
-             acc_R = mean(acc_R)/num_iter, acc_rho1 = acc_rho1/num_iter,
-             plot_times = pt, S_true_aes = S_true_aes, S_sb_aes = S_sb_aes,
-             S_rsf_aes = S_rsf_aes, S_ph_aes = S_ph_aes,
-             trace = list(lam0 = keep_lam, s1 = keep_s1, rho1 = keep_rho1),
-             minutes = as.numeric(difftime(Sys.time(), t_start, units = "mins"))),
-        file.path(outdir, sprintf("rep%02d.rds", rep_id)))
+
+  settings = c(num_iter = num_iter, burn_in = burn_in, num_tree = num_tree,
+               THIN = THIN, NQ = NQ, FINE_N = FINE_N, NB_PH = NB_PH,
+               NB_RSF = NB_RSF, NT_B = NT_B, RSF_TREES = RSF_TREES),
+
+  own_width = own_wid, n_keep = n_keep, ess_weights = ess_w, logw = lwk,
+  sb_lo = sb_lo, sb_hi = sb_hi, sbM_lo = sbM_lo, sbM_hi = sbM_hi,
+  ph_lo = ph_lo, ph_hi = ph_hi, rsf_lo = rsf_lo, rsf_hi = rsf_hi, scenario = scenario,
+  n_steps = if (use_step3) 3L else 2L, ess_step3 = ess, n_acc = n_acc,
+  logw_sd = if (length(lw_all)) sd(lw_all) else NA,
+  n = nt, events = sum(delta), cens_frac = mean(delta == 0),
+  amse = c(sbart = amse_sbart, rsf = amse_rsf, ph = amse_ph),
+  amse_t95 = c(sbart = amse_of(S_sb_amse, idx95),
+               rsf = if (!is.null(rsf)) amse_of(S_rsf_amse, idx95) else NA,
+               ph  = if (!is.null(ph))  amse_of(S_ph_amse,  idx95) else NA),
+  t95 = as.numeric(quantile(sd_df$time, 0.95)),
+  cor_M_bayes = cor(M_true, M_hat), cor_M_naive = cor(M_true, Mplug),
+  cor_W = cor(W_true, W_hat), W_true = W_true, W_hat = W_hat,
+  M_true = M_true, M_hat = M_hat, M_plug = Mplug,
+  rho1_post = if (use_step3 == 1) w_rho1/sumw else mean(keep_rho1[(burn_in+1):num_iter]),
+  s1_post = if (use_step3 == 1) w_s1/sumw else mean(keep_s1[(burn_in+1):num_iter]),
+  lam0_post = if (use_step3 == 1) w_lam/sumw else mean(keep_lam[(burn_in+1):num_iter]),
+  acc_R = mean(acc_R)/num_iter, acc_rho1 = acc_rho1/num_iter,
+  plot_times = pt, S_true_aes = S_true_aes, S_sb_aes = S_sb_aes,
+  S_rsf_aes = S_rsf_aes, S_ph_aes = S_ph_aes,
+  trace = list(lam0 = keep_lam, s1 = keep_s1, rho1 = keep_rho1),
+  minutes = as.numeric(difftime(Sys.time(), t_start, units = "mins"))),
+  file.path(outdir, sprintf("rep%02d.rds", rep_id)))
 
 lg(sprintf("DONE  scen %s (%d-step)  AMSE: SBART=%.5f RSF=%.5f PH=%.5f | ESS=%.1f | %.1f min",
            scenario, if (use_step3) 3L else 2L, amse_sbart, amse_rsf, amse_ph, ess,
