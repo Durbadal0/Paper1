@@ -1,4 +1,5 @@
 options(warn = -1)
+# rep, outdir, iterations, burn-in, trees, scenario, step-3 switch
 args <- commandArgs(trailingOnly = TRUE)
 rep_id   <- as.integer(args[1])
 outdir   <- if (length(args) >= 2) args[2] else "scenA_out"
@@ -8,6 +9,7 @@ num_tree <- if (length(args) >= 5) as.integer(args[5]) else 200
 scenario  <- if (length(args) >= 6) toupper(args[6]) else "C"
 use_step3 <- if (length(args) >= 7) as.integer(args[7]) else 0
 
+# optional overrides, args 8-14; defaults are the settings we run at
 argn <- function(k, d) if (length(args) >= k && nzchar(args[k])) as.integer(args[k]) else d
 THIN      <- argn( 8, 3)
 NQ        <- argn( 9, 50)
@@ -26,6 +28,7 @@ lg <- function(...) { m <- paste0(format(Sys.time(), "%H:%M:%S"), " [rep ", rep_
                       cat(m, "\n", file = logf, append = TRUE); cat(m, "\n"); flush.console() }
 t_start <- Sys.time()
 
+# the 15 panhandle counties and their real shared borders
 make_A15 <- function() {
   cn <- c("Escambia","SantaRosa","Okaloosa","Walton","Holmes","Washington","Bay",
           "Jackson","Calhoun","Gulf","Gadsden","Liberty","Franklin","Leon","Wakulla")
@@ -49,6 +52,7 @@ make_A10 <- function() { N <- 10; A <- matrix(0, N, N)
                  c(6,7),c(6,8),c(6,9),c(7,9),c(7,10),c(8,9),c(9,10)))
     { A[e[1],e[2]] <- 1; A[e[2],e[1]] <- 1 }; A }
 
+# D is the small design: 10 counties, 1,000 subjects, t_max 8
 if (scenario == "D") {
   A <- make_A10(); n_i <- c(80,100,120,100,80,120,80,100,120,100)
   n_0i <- c(8,12,15,20,10,18,9,25,14,11); t_max <- 8
@@ -61,14 +65,17 @@ p       <- 15
 sig0    <- 1; sig1 <- 1; rho_true <- 0.5
 cens_target <- 0.12
 
+# admissible rho, from the normalised adjacency, capped at (-1,1)
 dvec <- rowSums(A); Anorm <- diag(1/sqrt(dvec)) %*% A %*% diag(1/sqrt(dvec))
 ev_n <- eigen((Anorm + t(Anorm))/2, only.values = TRUE)$values
 rho_bounds <- c(max(-1, 1/min(ev_n)), min(1, 1/max(ev_n)))
 
+# piecewise hazard; the pieces break at t = 2 and t = 6
 g1 <- function(t,M,x1,x2,x3) 0.50*t*x1*x2 + 0.30*t*M*x1 + 0.15*M^2 + 0.40*x2*x3*M
 g2 <- function(t,M,x1,x2,x3) 0.35*t*x1*x2*x3*M + 0.25*t*M^2 + 0.20*x1*M + 0.15*M^2
 g3 <- function(t,M,x1,x2,x3) 0.30*log(t+1)*x1*x2*x3*M + 0.25*t*x2*x3 + 0.20*M^2
 
+# D swaps the exponential link for a probit one
 g4 <- function(t,M,x1,x2,x3) 0.5*t*x1*x2 + 0.3*t*M*x1 + 0.15*M^2 +
                              0.08*t^2*x1*x2*x3 + 0.3*t*x2*x3*M + 0.4*sqrt(x3)*M*t
 haz <- function(t, W, M, x1, x2, x3) {
@@ -76,6 +83,7 @@ haz <- function(t, W, M, x1, x2, x3) {
   v <- ifelse(t < 2, g1(t,M,x1,x2,x3), ifelse(t < 6, g2(t,M,x1,x2,x3), g3(t,M,x1,x2,x3)))
   if (scenario == "B") { W^(1 + 0.2*t) * exp(v) } else { W * exp(v) } }
 
+# true cumulative hazard, trapezoid on a fine grid
 FINE <- seq(0, 30, length.out = FINE_N); dFINE <- FINE[2] - FINE[1]
 cumH_fine <- function(W, M, x1, x2, x3) {
   h <- haz(FINE, W, M, x1, x2, x3)
@@ -83,11 +91,13 @@ cumH_fine <- function(W, M, x1, x2, x3) {
 S_true_fun <- function(tt, W, M, x1, x2, x3) {
   H <- cumH_fine(W, M, x1, x2, x3); exp(-approx(FINE, H, xout = tt, rule = 2)$y) }
 
+# a fresh truth in every replicate
 set.seed(20260814 + rep_id)
 Qinv <- solve(D - rho_true * A + diag(1e-8, N))
 R_true <- mvrnorm(1, rep(0, N), sig1^2 * Qinv); R_true <- R_true - mean(R_true)
 W_true <- exp(R_true)
 
+# C and D tie M to the frailty (spatial confounding)
 M_true <- if (scenario %in% c("C","D")) {
   plogis(rnorm(N, 0.9 * R_true, sqrt(1 - 0.9^2)))
 } else {
@@ -105,6 +115,7 @@ for (k in 1:nt) {
   Tobs[k] <- if (max(H) < E) max(FINE) else approx(H, FINE, xout = E, ties = "ordered")$y
 }
 
+# censoring above the median, drawn independently of T
 med   <- median(Tobs)
 uexp  <- rexp(nt)
 gap   <- function(r) mean(Tobs > med + uexp/r) - cens_target
@@ -119,6 +130,7 @@ lg(sprintf("settings: K=%d THIN=%d NQ=%d FINE=%d bootstraps PH/RSF=%d/%d RSF tre
 
 sd_df <- data.frame(county = cty, time = Tobs, delta = delta, X)
 
+# AMSE grid: 8x8x8 covariate points x 100 times
 tg   <- seq(t_max/100, t_max, length.out = 100); nT <- length(tg)
 gv   <- seq(0.05, 0.95, length.out = 8)
 xp   <- as.matrix(expand.grid(x1 = gv, x2 = gv, x3 = gv)); nXP <- nrow(xp)
@@ -126,6 +138,7 @@ S_true_amse <- array(0, c(N, nXP, nT))
 for (i in 1:N) for (r in 1:nXP)
   S_true_amse[i, r, ] <- S_true_fun(tg, W_true[i], M_true[i], xp[r,1], xp[r,2], xp[r,3])
 
+# AES panels: county 1, four (x1, p0) combinations
 t_aes <- 3
 pt <- seq(t_aes/100, t_aes, length.out = 100); nPT <- length(pt); dtp <- pt[1]
 aes_cases <- list(c(x1=0.3, p0=0.75), c(x1=0.7, p0=0.75),
@@ -133,6 +146,7 @@ aes_cases <- list(c(x1=0.3, p0=0.75), c(x1=0.7, p0=0.75),
 S_true_aes <- t(sapply(aes_cases, function(a)
   S_true_fun(pt, W_true[1], a["p0"], a["x1"], 0.5, 0.5)))
 
+# competitor 1: RSF, with the naive plug-in for M
 rsf_df <- cbind(sd_df[, c("time","delta")], as.data.frame(X), M = Mplug[cty])
 rsf <- tryCatch(ranger(Surv(time, delta) ~ ., data = rsf_df, num.trees = RSF_TREES,
                        min.node.size = 15, seed = 42 + rep_id), error = function(e) NULL)
@@ -141,6 +155,7 @@ rsf_S <- function(xmat, Mv, tt) {
   pr <- predict(rsf, data = nd)
   t(apply(pr$survival, 1, function(s) approx(pr$unique.death.times, s, xout = tt, rule = 2)$y)) }
 
+# competitor 2: PH frailty; sparse = FALSE keeps M identified
 ph_fml <- as.formula(paste("Surv(time, delta) ~", paste(c(paste0("x",1:p), "M"), collapse = " + "),
                            "+ frailty(county, distribution = 'gaussian', sparse = FALSE)"))
 ph_dat <- cbind(sd_df[, c("time","delta","county")], as.data.frame(X), M = Mplug[cty])
@@ -154,6 +169,7 @@ if (!is.null(ph)) {
   frailv <- if (!is.null(frail) && length(frail) == N) as.numeric(frail) else rep(0, N)
   W_ph   <- exp(frailv)
 
+  # Breslow baseline, frailties kept in the risk set
   lp_dat <- as.numeric(as.matrix(ph_dat[, paste0("x", 1:p)]) %*% bph[paste0("x", 1:p)]) +
             bph["M"] * ph_dat$M + frailv[ph_dat$county]
   o   <- order(ph_dat$time)
@@ -169,6 +185,7 @@ if (!is.null(ph)) {
              bph["M"], length(et), H0(max(sd_df$time))))
 }
 
+# ---- Step 1: CAR model for M from the survey counts
 car_ld <- function(x, rho, s2) {
   Q <- (D - rho * A); ev <- eigen(Q, only.values = TRUE, symmetric = TRUE)$values
   0.5 * (sum(log(pmax(ev, 1e-12))) - N * log(s2)) - 0.5 * as.numeric(t(x) %*% Q %*% x) / s2 }
@@ -193,11 +210,13 @@ M_hat  <- colMeans(M_post)
 lg(sprintf("step1 done: cor(M_true, M_hat) = %.3f  (naive plug-in cor = %.3f)",
            cor(M_true, M_hat), cor(M_true, Mplug)))
 
+# ---- Step 2: SBART survival model
 max_time <- max(sd_df$time)
 Xd <- cbind(sd_df$time/max_time, M_hat[cty], X)
 colnames(Xd) <- c("time", "M", paste0("x", 1:p))
 Yinit <- ifelse(delta == 1, 0.5, -0.5) + rnorm(nt, 0, 0.1)
 
+# sigma = 1 and sigma_mu = 3/(2 sqrt K), as the probit augmentation needs
 hyp <- Hypers(Xd, Yinit, num_tree = num_tree, sigma_hat = 1, k = 1/3)
 forest <- MakeForest(hyp, Opts(num_burn = 0, num_save = 1, update_sigma = FALSE), warn = FALSE)
 
@@ -210,6 +229,7 @@ tg0 <- c(0, tg); nT0 <- length(tg0)
 cumtrap <- function(P, h) {
   m <- (P[, -1, drop = FALSE] + P[, -ncol(P), drop = FALSE]) / 2
   t(apply(m, 1, cumsum)) * h }
+# the prediction blocks never change, so build them once
 amse_blocks <- lapply(1:N, function(i) {
   bx <- cbind(xp, xfill[rep(1, nXP), , drop = FALSE])
   cbind(rep(tg0, each = nXP)/max_time, M_hat[i], bx[rep(1:nXP, times = nT0), ]) })
@@ -222,16 +242,19 @@ aesM_base <- aes_block
 n_keep_max <- sum(seq_len(num_iter) > burn_in & seq_len(num_iter) %% THIN == 0)
 S_amse_sum <- array(0, c(N, nXP, nT)); S_aes_sum <- matrix(0, 4, nPT); n_acc <- 0
 
+# keep every retained AES draw; the credible band is built from these
 S_aes_draws  <- array(NA_real_, c(4, nPT, n_keep_max))
 S_aesM_draws <- if (use_step3 == 1) array(NA_real_, c(4, nPT, n_keep_max)) else NULL
 lw_keep <- numeric(n_keep_max); n_keep <- 0
 
 sumw <- 0; maxlw <- -Inf; lw_all <- c(); w_lam <- 0; w_W <- rep(0, N)
 w_rho1 <- 0; w_s1 <- 0
+# quadrature points for the Step-3 integral
 qw <- (seq_len(NQ) - 0.5)/NQ
 q_rows  <- rep(1:nt, times = NQ)
 Xq_base <- cbind(as.numeric(outer(sd_df$time, qw))/max_time, 0, X[q_rows, , drop = FALSE])
 Xy_base <- cbind(sd_df$time/max_time, 0, X)
+# rescale the running sums whenever a bigger weight shows up
 rescale_all <- function(f) { S_amse_sum <<- S_amse_sum*f; S_aes_sum <<- S_aes_sum*f
   w_lam <<- w_lam*f; w_W <<- w_W*f; w_rho1 <<- w_rho1*f; w_s1 <<- w_s1*f
   sumw <<- sumw*f }
@@ -241,6 +264,7 @@ sy    <- as.numeric(tapply(sd_df$time, factor(cty, levels = 1:N), sum))
 
 for (iter in 1:num_iter) {
 
+  # augmentation: the rejected points of the thinned Poisson process
   rates <- lambda0 * Wv[cty] * sd_df$time
   q <- rpois(nt, pmax(rates, 1e-8))
   idx <- which(q > 0)
@@ -257,11 +281,13 @@ for (iter in 1:num_iter) {
   ev_idx <- which(delta == 1)
   Xall <- rbind(Xaug, Xd[ev_idx, , drop = FALSE])
   Yall <- c(rep(0, if (is.null(Xaug)) 0 else nrow(Xaug)), rep(1, length(ev_idx)))
+  # events are 1, rejected points 0; latent Z, then one back-fitting sweep
   bcur <- forest$do_predict(Xall)
   Z <- ifelse(Yall == 1, rtruncnorm(length(Yall), a = 0, b = Inf, mean = bcur, sd = 1),
                          rtruncnorm(length(Yall), a = -Inf, b = 0, mean = bcur, sd = 1))
   forest$do_gibbs(Xall, Z, Xall, 1)
 
+  # lambda0 and sigma1^2 are closed form; rho1 and R need MH
   lambda0 <- rgamma(1, 1 + sum(delta) + sum(m_cnt), 1 + sum(Wv[cty] * sd_df$time))
 
   qf <- as.numeric(t(Rv) %*% (D - rho1 * A) %*% Rv)
@@ -270,6 +296,7 @@ for (iter in 1:num_iter) {
   rp <- runif(1, max(rho_bounds[1], rho1 - 0.05), min(rho_bounds[2], rho1 + 0.05))
   if (log(runif(1)) < car_ld(Rv, rp, s1) - car_ld(Rv, rho1, s1)) { rho1 <- rp; acc_rho1 <- acc_rho1 + 1 }
 
+  # the W exponent counts events AND augmented points
   for (c2 in 1:N) {
     Rp <- Rv; Rp[c2] <- rnorm(1, Rv[c2], 0.2)
     llp <- (d_cnt[c2] + m_cnt[c2]) * Rp[c2] - lambda0 * exp(Rp[c2]) * sy[c2]
@@ -277,11 +304,13 @@ for (iter in 1:num_iter) {
     la <- (llp + car_ld(Rp, rho1, s1)) - (llc + car_ld(Rv, rho1, s1))
     if (is.finite(la) && log(runif(1)) < la) { Rv <- Rp; acc_R[c2] <- acc_R[c2] + 1 }
   }
+  # no recentring here: with |rho| < 1 the CAR is already proper
   Wv <- exp(Rv)
   keep_lam[iter] <- lambda0; keep_s1[iter] <- s1; keep_rho1[iter] <- rho1; keep_W[iter, ] <- Wv
 
   if (iter > burn_in && iter %% THIN == 0) {
     lw <- 0
+    # ---- Step 3: the importance weight for this draw
     if (use_step3 == 1) {
       Mdraw <- M_post[sample.int(nrow(M_post), 1), ]
       Xq_m <- Xq_base; Xq_m[, 2] <- Mdraw[cty[q_rows]]
@@ -292,9 +321,11 @@ for (iter in 1:num_iter) {
       Ih  <- rowMeans(matrix(pnorm(forest$do_predict(Xq_h)), nt, NQ)) * sd_df$time
       lPm <- log(pmax(pnorm(forest$do_predict(Xy_m)), 1e-300))
       lPh <- log(pmax(pnorm(forest$do_predict(Xy_h)), 1e-300))
+      # log omega*: the likelihood ratio, M drawn against M-hat
       lw  <- sum(delta * (lPm - lPh)) - lambda0 * sum(Wv[cty] * (Im - Ih))
       lw_all <- c(lw_all, lw)
     }
+    # running max keeps exp() from overflowing
     if (lw > maxlw) { if (is.finite(maxlw)) rescale_all(exp(maxlw - lw)); maxlw <- lw; w <- 1
     } else w <- exp(lw - maxlw)
     n_acc <- n_acc + 1; sumw <- sumw + w
@@ -353,11 +384,13 @@ S_ph_aes  <- if (!is.null(ph)) {
   lp <- as.numeric(xaes %*% bph[paste0("x",1:p)]) + bph["M"] * sapply(aes_cases, function(a) a["p0"])
   exp(-W_ph[1] * outer(exp(lp), H0(pt))) } else matrix(NA, 4, nPT)
 
+# ---- each method's own 95% interval; no coverage is computed
 lg("intervals: SBART weighted credible band")
 lwk   <- lw_keep[1:n_keep]
 Wt    <- exp(lwk - max(lwk))
 ess_w <- sum(Wt)^2 / sum(Wt^2)
 
+# weighted quantiles, so band and point estimate use the same draws
 wquant <- function(v, w, probs = c(0.025, 0.975)) {
   o <- order(v); cw <- cumsum(w[o])/sum(w)
   vapply(probs, function(pp) v[o][which(cw >= pp)[1]], numeric(1)) }
@@ -375,6 +408,7 @@ gridX <- as.data.frame(xaes); names(gridX) <- paste0("x", 1:p)
 gridX$M <- as.numeric(sapply(aes_cases, function(a) a["p0"]))
 Xg <- as.matrix(gridX[, paste0("x", 1:p)])
 ph_draws <- array(NA_real_, c(4, nPT, NB_PH))
+# every resample refits the whole frailty model, baseline included
 for (b in 1:NB_PH) {
   db <- ph_dat[sample.int(nt, nt, replace = TRUE), ]
   fb <- tryCatch(coxph(ph_fml, data = db), error = function(e) NULL)
@@ -420,6 +454,7 @@ own_wid <- c(sbart = mean(sb_hi - sb_lo, na.rm = TRUE),
 lg(sprintf("interval widths: SBART=%.4f (M-integrated %.4f) PH=%.4f RSF=%.4f",
            own_wid["sbart"], own_wid["sbart_Mint"], own_wid["ph"], own_wid["rsf"]))
 
+# everything this replicate produced
 saveRDS(list(rep_id = rep_id, seed = 20260814 + rep_id, num_tree = num_tree,
 
   settings = c(num_iter = num_iter, burn_in = burn_in, num_tree = num_tree,
