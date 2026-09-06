@@ -1,0 +1,345 @@
+################################################################################
+# spatial_sbart() -- the method of the paper, all three steps, in one function.
+#
+
+
+################################################################################
+
+spatial_sbart <- function(
+    ## ---- data ---------------------------------------------------------------
+    y, delta, X, cluster, A,      # D_1: follow-up, event indicator, covariates,
+                                  #      cluster index (1..N), adjacency (N x N)
+    m0, n0,                       # D_0: BRFSS successes and totals, length N
+    ## ---- prediction ---------------------------------------------------------
+    pred = NULL,                  # list(times, X, M, cluster); M = NA means
+                                  #   "use this draw's M_i" (the 3-step
+                                  #   predictive); a number holds M there
+    ## ---- Step 1 -------------------------------------------------------------
+    step1_iter = 12000, step1_burn = 6000,
+    mh_logitM_sd = 0.3, mh_rho0_width = 0.1,
+    ## ---- Step 2 -------------------------------------------------------------
+    num_iter = 10000, burn_in = 3500, thin = 10, num_tree = 200,
+    mh_R_sd = 0.2, mh_rho1_width = 0.05,
+    ## ---- Step 3 -------------------------------------------------------------
+    use_step3 = TRUE, n_quad = 50,
+    ## ---- options ------------------------------------------------------------
+    spatial = TRUE,               # FALSE = independent frailty (the competitor)
+    rho_bounds_from = c("normalized", "raw_A"),
+    a_sigma = 1, b_sigma = 1,     # IG(a,b) for sigma_0^2 and sigma_1^2
+    a_lambda = 1, b_lambda = 1,   # Gamma(a,b) for lambda_0
+    seed = NULL, verbose = TRUE) {
+
+  ## ---------------------------------------------------------------- validation
+  rho_bounds_from <- match.arg(rho_bounds_from)
+  X <- as.matrix(X); A <- as.matrix(A); N <- nrow(A); nt <- length(y)
+  stopifnot(length(delta) == nt, length(cluster) == nt, nrow(X) == nt,
+            ncol(A) == N, length(m0) == N, length(n0) == N,
+            all(is.finite(y)), all(y > 0), all(delta %in% c(0, 1)),
+            all(is.finite(X)), all(cluster %in% seq_len(N)),
+            all(n0 >= 0), all(m0 >= 0), all(m0 <= pmax(n0, 0)),
+            burn_in < num_iter, step1_burn < step1_iter, thin >= 1)
+  if (!isTRUE(all.equal(A, t(A), check.attributes = FALSE)))
+    stop("the adjacency matrix must be symmetric")
+  if (any(diag(A) != 0)) stop("the adjacency matrix must have a zero diagonal")
+  dv <- unname(rowSums(A))
+  if (any(dv == 0))
+    stop("cluster(s) with no neighbours: ", paste(which(dv == 0), collapse = ", "),
+         " -- D - rho*A is singular for them; merge or drop them first")
+  if (!requireNamespace("SoftBart", quietly = TRUE) ||
+      !requireNamespace("truncnorm", quietly = TRUE))
+    stop("packages SoftBart and truncnorm are required")
+  if (!is.null(seed)) set.seed(seed)
+  say <- function(...) if (verbose) { cat(format(Sys.time(), "%H:%M:%S"), "", ..., "\n"); flush.console() }
+
+  D <- diag(dv); p <- ncol(X)
+  ## Section 2.2: continuous covariates are scaled to (0,1).  The ranges are
+  ## kept so that every prediction point goes through the SAME transformation.
+  rng <- apply(X, 2, range)
+  sc <- function(Z) { Z <- as.matrix(Z)
+    for (j in seq_len(ncol(Z))) { d <- rng[2, j] - rng[1, j]
+      Z[, j] <- if (d < 1e-12) 0.5 else (Z[, j] - rng[1, j])/d }
+    pmin(pmax(Z, 0), 1) }
+  Xs <- sc(X); max_time <- max(y)
+
+  ## --------------------------------------------- CAR densities, computed fast
+  ## Atil = D^{-1/2} A D^{-1/2}.  Its eigenvalues give BOTH the admissible range
+  ## of rho AND the log-determinant, so eigen() is called once, not per update:
+  ##   log|D - rho A| = sum(log d_i) + sum(log(1 - rho * e_k))                (*)
+  Atil <- diag(1/sqrt(dv)) %*% A %*% diag(1/sqrt(dv))
+  e_til <- eigen((Atil + t(Atil))/2, symmetric = TRUE, only.values = TRUE)$values
+  rho_bounds <- if (rho_bounds_from == "normalized") {
+    c(max(-1, 1/min(e_til)), min(1, 1/max(e_til)))
+  } else {                       # the interval as printed in the manuscript
+    e_raw <- eigen(A, symmetric = TRUE, only.values = TRUE)$values
+    c(1/min(e_raw), 1/max(e_raw))
+  }
+  log_d_sum <- sum(log(dv))
+  car_logdet <- function(rho) log_d_sum + sum(log(1 - rho*e_til))   # by (*)
+  ## quadratic form u'(D - rho A)u
+  car_quad <- function(u, rho) sum(dv*u^2) - rho*sum(u*(A %*% u))
+  ## change in that quadratic form when ONLY component i moves u_i -> ui_new:
+  ##   d = a_i+ (ui_new^2 - u_i^2) - 2 rho (ui_new - u_i) (A u)_i          (**)
+  car_quad_delta <- function(u, i, ui_new, rho)
+    dv[i]*(ui_new^2 - u[i]^2) - 2*rho*(ui_new - u[i])*sum(A[i, ]*u)
+  ## full log density, needed only where rho itself changes
+  car_ld <- function(u, rho, s2)
+    0.5*(car_logdet(rho) - N*log(s2)) - 0.5*car_quad(u, rho)/s2
+
+  ##############################################################################
+  ## STEP 1.  Sample p_0(M, eta_0 | D_0) ~ L_0(M|D_0) g_0(M|eta_0) p(eta_0),
+  ##          then set M_hat = E[M | D_0].
+  ##############################################################################
+  say("Step 1: CAR model for M from D_0")
+  u <- qlogis((m0 + 0.5)/(n0 + 1))          # logit(M), started at a smoothed MLE
+  s0 <- 1; rho0 <- 0
+  has0 <- n0 > 0                            # n_0i = 0 contributes no binomial term
+  Msave <- matrix(NA_real_, step1_iter, N)
+  acc_M <- rep(0, N); acc_r0 <- 0
+  for (it in seq_len(step1_iter)) {
+    ## 1a. component-wise MH for logit(M_i).  In this ratio the CAR
+    ##     log-determinant cancels (rho_0 is held fixed), so only the change in
+    ##     the quadratic form is needed -- by (**) that is O(N), not O(N^3).
+    for (i in seq_len(N)) {
+      ui <- rnorm(1, u[i], mh_logitM_sd)
+      llp <- if (has0[i]) dbinom(m0[i], n0[i], plogis(ui),   log = TRUE) else 0
+      llc <- if (has0[i]) dbinom(m0[i], n0[i], plogis(u[i]), log = TRUE) else 0
+      la <- (llp - llc) - 0.5*car_quad_delta(u, i, ui, rho0)/s0
+      if (is.finite(la) && log(runif(1)) < la) { u[i] <- ui; acc_M[i] <- acc_M[i] + 1 }
+    }
+    ## 1b. Gibbs  sigma_0^2 | . ~ IG(a + N/2, b + u'(D - rho_0 A)u / 2)
+    s0 <- 1/rgamma(1, a_sigma + N/2, b_sigma + car_quad(u, rho0)/2)
+    ## 1c. uniform random-walk MH for rho_0 (the log-determinant does NOT cancel)
+    rp <- runif(1, max(rho_bounds[1], rho0 - mh_rho0_width),
+                   min(rho_bounds[2], rho0 + mh_rho0_width))
+    if (log(runif(1)) < car_ld(u, rp, s0) - car_ld(u, rho0, s0)) {
+      rho0 <- rp; acc_r0 <- acc_r0 + 1 }
+    Msave[it, ] <- plogis(u)
+  }
+  M_post <- Msave[(step1_burn + 1):step1_iter, , drop = FALSE]
+  M_hat  <- colMeans(M_post)                # the Bayes estimate E[M | D_0]
+  say(sprintf("  acceptance: logit(M) %.2f, rho_0 %.2f",
+              mean(acc_M)/step1_iter, acc_r0/step1_iter))
+
+  ##############################################################################
+  ## STEP 2.  MCMC for (b, lambda_0, W, eta_1) from the approximate posterior
+  ##          (8), M held at M_hat.  Algorithm 1, lines 4-11.
+  ##############################################################################
+  say("Step 2: SBART survival with Poisson-thinning augmentation")
+  Xd <- cbind(y/max_time, M_hat[cluster], Xs)
+  colnames(Xd) <- c("time", "M", colnames(X))
+  Yinit <- ifelse(delta == 1, 0.5, -0.5) + rnorm(nt, 0, 0.1)
+  ## sigma is FIXED at 1 -- the probit augmentation of 2b requires it -- and
+  ## k = 1/3 gives the leaf scale sigma_mu = 3/(2 sqrt(K)) that the paper states.
+  hyp <- SoftBart::Hypers(Xd, Yinit, num_tree = num_tree, sigma_hat = 1, k = 1/3)
+  forest <- SoftBart::MakeForest(
+    hyp, SoftBart::Opts(num_burn = 0, num_save = 1, update_sigma = FALSE), warn = FALSE)
+
+  lambda0 <- 0.1; R <- rep(0, N); W <- exp(R); s1 <- 1; rho1 <- 0
+  d_cnt <- tabulate(cluster[delta == 1], nbins = N)
+  sy <- as.numeric(tapply(y, factor(cluster, levels = seq_len(N)), sum)); sy[is.na(sy)] <- 0
+
+  ## Step-3 quadrature design: midpoints of (0, y_ij), for
+  ## Int_0^{y_ij} Phi(b(s, ., x_ij)) ds.  Built once.
+  qw <- (seq_len(n_quad) - 0.5)/n_quad
+  q_rows <- rep(seq_len(nt), times = n_quad)
+  Xq_base <- cbind(as.numeric(outer(y, qw))/max_time, 0, Xs[q_rows, , drop = FALSE])
+  Xy_base <- cbind(y/max_time, 0, Xs)
+
+  ## prediction design
+  has_pred <- !is.null(pred)
+  if (has_pred) {
+    ptimes <- sort(pred$times); nPT <- length(ptimes)
+    if (max(ptimes) > max_time)
+      warning("prediction times run past the largest observed follow-up (",
+              round(max_time, 3), "); trees extrapolate flat beyond it")
+    pX <- sc(pred$X); nR <- nrow(pX)
+    pM <- if (is.null(pred$M)) rep(NA_real_, nR) else rep_len(pred$M, nR)
+    pC <- if (is.null(pred$cluster)) rep(1L, nR) else rep_len(pred$cluster, nR)
+    stopifnot(all(pC %in% seq_len(N)))
+    t0 <- c(0, ptimes); nT0 <- length(t0)
+    wid <- diff(t0)                       # the ACTUAL panel widths: the grid need
+                                          # not be equally spaced
+    pred_block <- cbind(rep(t0, each = nR)/max_time, 0,
+                        pX[rep(seq_len(nR), nT0), , drop = FALSE])
+    row_of <- rep(seq_len(nR), nT0)
+    ## cumulative trapezoid of P (rows x nT0 values at t0) onto ptimes
+    cumtrap <- function(P) t(apply((P[, -1, drop = FALSE] +
+                                    P[, -ncol(P), drop = FALSE])/2 * rep(wid, each = nrow(P)),
+                                   1, cumsum))
+    S_sum <- matrix(0, nR, nPT)
+  }
+  n_max <- sum(seq_len(num_iter) > burn_in & seq_len(num_iter) %% thin == 0)
+  if (has_pred) S_draws <- array(NA_real_, c(nR, nPT, n_max))
+  keep <- list(lambda0 = numeric(n_max), sigma1sq = numeric(n_max),
+               rho1 = numeric(n_max), W = matrix(NA_real_, n_max, N),
+               M = matrix(NA_real_, n_max, N), logw = numeric(n_max))
+  vip_sum <- rep(0, ncol(Xd)); names(vip_sum) <- colnames(Xd)
+  sumw <- 0; maxlw <- -Inf; nk <- 0
+  rescale <- function(f) { sumw <<- sumw*f; vip_sum <<- vip_sum*f
+                           if (has_pred) S_sum <<- S_sum*f }
+  acc_R <- rep(0, N); acc_r1 <- 0
+
+  for (iter in seq_len(num_iter)) {
+    ## 2a. augmentation (Algorithm 1, lines 4-7): G_ij are the REJECTED points of
+    ##     a thinned Poisson process of rate lambda_0 W_i {1 - Phi(b)} on (0,y_ij)
+    q <- rpois(nt, pmax(lambda0*W[cluster]*y, 1e-8))
+    idx <- which(q > 0); Xaug <- NULL; m_cnt <- rep(0, N)
+    if (length(idx)) {
+      ri <- rep(idx, q[idx]); G <- runif(length(ri), 0, y[ri])
+      XG <- cbind(G/max_time, M_hat[cluster[ri]], Xs[ri, , drop = FALSE])
+      kp <- runif(nrow(XG)) > pnorm(forest$do_predict(XG))     # keep w.p. 1 - Phi(b)
+      if (any(kp)) { Xaug <- XG[kp, , drop = FALSE]
+                     m_cnt <- tabulate(cluster[ri[kp]], nbins = N) }
+    }
+    ## 2b. probit back-fitting (Algorithm 1, line 9): events are 1, rejected
+    ##     points 0; Albert-Chib latent Z; one Bayesian back-fitting sweep
+    ev <- which(delta == 1)
+    Xall <- rbind(Xaug, Xd[ev, , drop = FALSE])
+    Yall <- c(rep(0, if (is.null(Xaug)) 0 else nrow(Xaug)), rep(1, length(ev)))
+    bc <- forest$do_predict(Xall)
+    Z <- ifelse(Yall == 1,
+                truncnorm::rtruncnorm(length(Yall), a = 0, b = Inf, mean = bc, sd = 1),
+                truncnorm::rtruncnorm(length(Yall), a = -Inf, b = 0, mean = bc, sd = 1))
+    forest$do_gibbs(Xall, Z, Xall, 1)
+    ## 2c. lambda_0 | . ~ Gamma(a + sum_ij delta_ij + sum_ij m_ij,
+    ##                          b + sum_ij W_i y_ij).
+    ##     The augmented points carry a factor lambda_0 as well as the events.
+    lambda0 <- rgamma(1, a_lambda + sum(delta) + sum(m_cnt),
+                         b_lambda + sum(W[cluster]*y))
+    ## 2d. sigma_1^2 | . ~ IG(a + N/2, b + R'(D - rho_1 A)R / 2)
+    qf <- if (spatial) car_quad(R, rho1) else sum(R^2)
+    s1 <- 1/rgamma(1, a_sigma + N/2, b_sigma + qf/2)
+    ## 2e. rho_1 | . by uniform random-walk MH (log-determinant does not cancel)
+    if (spatial) {
+      rp <- runif(1, max(rho_bounds[1], rho1 - mh_rho1_width),
+                     min(rho_bounds[2], rho1 + mh_rho1_width))
+      if (log(runif(1)) < car_ld(R, rp, s1) - car_ld(R, rho1, s1)) {
+        rho1 <- rp; acc_r1 <- acc_r1 + 1 }
+    }
+    ## 2f. R = log W, component-wise MH.  In the complete-data likelihood W_i
+    ##     enters as W_i^{delta_i+ + m_i+} exp(-lambda_0 W_i y_i+): every
+    ##     rejected point contributes a factor W_i, not only every event.
+    ##     The prior term is again only the change in the quadratic form.
+    ##     NO deterministic recentring of R: with |rho_1| < 1 the CAR of eq (3)
+    ##     is proper, E[R_i] = 0 holds automatically, and the projection onto
+    ##     sum(R) = 0 is not invariant for the target.
+    for (i in seq_len(N)) {
+      Ri <- rnorm(1, R[i], mh_R_sd)
+      cnt <- d_cnt[i] + m_cnt[i]
+      llp <- cnt*Ri   - lambda0*exp(Ri)*sy[i]
+      llc <- cnt*R[i] - lambda0*exp(R[i])*sy[i]
+      lprior <- if (spatial) -0.5*car_quad_delta(R, i, Ri, rho1)/s1
+                else          -0.5*(Ri^2 - R[i]^2)/s1
+      la <- (llp - llc) + lprior
+      if (is.finite(la) && log(runif(1)) < la) { R[i] <- Ri; acc_R[i] <- acc_R[i] + 1 }
+    }
+    W <- exp(R)
+
+    ############################################################################
+    ## STEP 3.  Weight this retained draw by omega* of eq (9), turning the
+    ##          Step-2 sample into a sample from the exact posterior (7).
+    ############################################################################
+    if (iter > burn_in && iter %% thin == 0) {
+      lw <- 0; Mdraw <- M_hat
+      if (use_step3) {
+        ## 3a. draw M^(b) from Step 1's posterior p_0(M | D_0)
+        Mdraw <- M_post[sample.int(nrow(M_post), 1), ]
+        ## 3b. log omega* = sum_ij [ delta_ij log{Phi(b(y_ij,M_i))/Phi(b(y_ij,Mhat_i))}
+        ##            - lambda_0 W_i Int_0^{y_ij}{Phi(b(s,M_i)) - Phi(b(s,Mhat_i))} ds ]
+        ##     with the integral by n_quad-point midpoint quadrature
+        Qm <- Xq_base; Qm[, 2] <- Mdraw[cluster[q_rows]]
+        Qh <- Xq_base; Qh[, 2] <- M_hat[cluster[q_rows]]
+        Ym <- Xy_base; Ym[, 2] <- Mdraw[cluster]
+        Yh <- Xy_base; Yh[, 2] <- M_hat[cluster]
+        Im <- rowMeans(matrix(pnorm(forest$do_predict(Qm)), nt, n_quad))*y
+        Ih <- rowMeans(matrix(pnorm(forest$do_predict(Qh)), nt, n_quad))*y
+        lPm <- log(pmax(pnorm(forest$do_predict(Ym)), 1e-300))
+        lPh <- log(pmax(pnorm(forest$do_predict(Yh)), 1e-300))
+        lw <- sum(delta*(lPm - lPh)) - lambda0*sum(W[cluster]*(Im - Ih))
+      }
+      
+      if (lw > maxlw) { if (is.finite(maxlw)) rescale(exp(maxlw - lw)); maxlw <- lw; w <- 1
+      } else w <- exp(lw - maxlw)
+      sumw <- sumw + w; nk <- nk + 1
+      keep$lambda0[nk] <- lambda0; keep$sigma1sq[nk] <- s1; keep$rho1[nk] <- rho1
+      keep$W[nk, ] <- W; keep$M[nk, ] <- Mdraw; keep$logw[nk] <- lw
+      ## Variable Inclusion Proportions: post burn-in and WEIGHTED.
+      ## get_counts() reports the CURRENT forest's split counts (verified: it
+      ## does not accumulate), so summing w * counts is the weighted VIP.
+      ## The denominator includes every splitting variable, time among them --
+      ## which is why the six covariates of Table 1 sum to 0.82-0.88, not to 1.
+      vip_sum <- vip_sum + w*as.numeric(forest$get_counts())
+      ## survival on the prediction grid: eq (2) integrated,
+      ##   S = exp{-lambda_0 W_i Int_0^t Phi(b(s, M, x)) ds}, trapezoid from t = 0
+      if (has_pred) {
+        Mrow <- ifelse(is.na(pM), Mdraw[pC], pM)
+        blk <- pred_block; blk[, 2] <- Mrow[row_of]
+        P <- matrix(pnorm(forest$do_predict(blk)), nR, nT0)
+        S <- exp(-lambda0*W[pC]*cumtrap(P))
+        S[S > 1] <- 1                       # guard only; Phi >= 0 makes S <= 1
+        S_sum <- S_sum + w*S
+        S_draws[, , nk] <- S
+      }
+    }
+    if (verbose && iter %% 1000 == 0)
+      say(sprintf("  iter %d/%d  lambda0=%.3f sigma1^2=%.2f rho1=%.2f",
+                  iter, num_iter, lambda0, s1, rho1))
+  }
+
+  ##############################################################################
+  ## Posterior summaries: each one self-normalised and Step-3 weighted
+  ##############################################################################
+  lw <- keep$logw[seq_len(nk)]
+  wt <- exp(lw - max(lw))                    # all equal to 1 when Step 3 is off
+  ess <- sum(wt)^2/sum(wt^2)
+  wmean  <- function(v) if (is.matrix(v)) colSums(wt*v)/sum(wt) else sum(wt*v)/sum(wt)
+  ## weighted quantile = inverse of the weighted empirical distribution function
+  wquant <- function(v, probs = c(0.025, 0.975)) {
+    o <- order(v); cw <- cumsum(wt[o])/sum(wt)
+    vapply(probs, function(pp) v[o][which(cw >= pp)[1]], numeric(1)) }
+  ## weighted HPD = the shortest interval carrying `level` of the weight
+  whpd <- function(v, level = 0.95) {
+    o <- order(v); vs <- v[o]; cw <- cumsum(wt[o])/sum(wt); n <- length(vs)
+    j <- 1L; best <- c(vs[1], vs[n]); bw <- Inf
+    for (i in seq_len(n)) {
+      lo <- if (i == 1L) 0 else cw[i - 1L]
+      if (j < i) j <- i
+      while (j <= n && cw[j] - lo < level) j <- j + 1L
+      if (j > n) break
+      if (vs[j] - vs[i] < bw) { bw <- vs[j] - vs[i]; best <- c(vs[i], vs[j]) } }
+    best }
+
+  out <- list(
+    M_post = M_post, M_hat = M_hat,                                   # Step 1
+    draws = list(lambda0 = keep$lambda0[seq_len(nk)],
+                 sigma1sq = keep$sigma1sq[seq_len(nk)],
+                 rho1 = keep$rho1[seq_len(nk)],
+                 W = keep$W[seq_len(nk), , drop = FALSE],
+                 M = keep$M[seq_len(nk), , drop = FALSE]),            # Step 2
+    logw = lw, weights = wt/sum(wt), ess = ess, n_draws = nk,         # Step 3
+    post = list(lambda0 = wmean(keep$lambda0[seq_len(nk)]),
+                sigma1sq = wmean(keep$sigma1sq[seq_len(nk)]),
+                rho1 = wmean(keep$rho1[seq_len(nk)]),
+                W = wmean(keep$W[seq_len(nk), , drop = FALSE]),
+                M = wmean(keep$M[seq_len(nk), , drop = FALSE])),
+    vip = { v <- vip_sum/sumw; v/sum(v) },
+    rho_bounds = rho_bounds, rho_bounds_from = rho_bounds_from,
+    acc = list(logitM = mean(acc_M)/step1_iter, rho0 = acc_r0/step1_iter,
+               R = mean(acc_R)/num_iter, rho1 = acc_r1/num_iter),
+    n_steps = if (use_step3) 3L else 2L, spatial = spatial,
+    wmean = wmean, wquant = wquant, whpd = whpd)
+  if (has_pred) {
+    Sd <- S_draws[, , seq_len(nk), drop = FALSE]
+    q <- apply(Sd, c(1, 2), wquant)
+    out$pred <- list(times = ptimes, S = S_sum/sumw,
+                     lower = array(q[1, , ], c(nR, nPT)),
+                     upper = array(q[2, , ], c(nR, nPT)),
+                     draws = Sd)
+  }
+  say(sprintf("Done: %d retained draws, importance ESS = %.1f (%.0f%%)",
+              nk, ess, 100*ess/nk))
+  if (use_step3 && ess < 0.1*nk)
+    warning("Step-3 weights are close to degenerate (ESS < 10% of draws): ",
+            "posterior summaries, and interval estimates especially, rest on very few draws")
+  out
+}
