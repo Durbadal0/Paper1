@@ -1,4 +1,4 @@
-#!/usr/bin/env Rscript
+
 ################################################################################
 # FCR data analysis -- ALL THREE STEPS of the algorithm, one stratum per run.
 #
