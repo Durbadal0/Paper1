@@ -41,15 +41,7 @@
 #       13 county_of_interest(6 = Broward)  14 t_horizon(10)  15 seed(20260816)
 # Usage: Rscript fcr_data_analysis.R AA D out/AA_D
 #
-# Implementation notes
-#   * rho_0 and rho_1: uniform random-walk proposal truncated to (-1, 1) with the
-#     Hastings correction for the truncation.
-#   * SoftBart's forest$do_gibbs() draws from R's random-number generator without
-#     saving its state. The L'Ecuyer-CMRG generator is used, and after every call
-#     the generator moves to the next independent stream, so the other updates never
-#     re-use the random numbers of the tree update.
-#   * Step 3 evaluates the weights omega*_ij of the paper exactly, with the integrals
-#     int_0^y Phi(b(s, M, x)) ds computed by an NQ-point midpoint rule.
+
 ################################################################################
 options(warn = -1)
 args <- commandArgs(trailingOnly = TRUE)
