@@ -19,8 +19,7 @@
 #           weighted average over these draws, and the importance-sampling ESS
 #           is reported so the reader can judge them.
 #
-# Outputs, all computed under the Step-3 posterior (summaries are also given
-# unweighted, i.e. 2-step, so the effect of Step 3 can be seen):
+# Outputs, all computed under the 3 step posterior 
 #   * Variable Inclusion Proportions (Table 1)
 #   * survival curves S(t) for a representative patient (Figure 4)
 #   * DMS(10) and DMS(5) with 95% HPD by tumour grade (Table 2, Table S2)
