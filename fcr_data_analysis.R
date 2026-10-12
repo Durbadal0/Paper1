@@ -35,11 +35,7 @@
 # Data files read from the working directory (not distributed):
 #   Surv_data2.csv, mammo_county_16A.xlsx, mammo_county_16W.xlsx, W.mat.csv
 #
-# args: 1 race(AA|WA)  2 stage(L|R|D)  3 outdir
-#       4 num_iter(30000)  5 burn_in(15000)  6 num_tree(200)  7 use_step3(1)
-#       8 THIN(10)  9 NQ(50)  10 n1(30000)  11 b1(10000)  12 spatial(1)
-#       13 county_of_interest(6 = Broward)  14 t_horizon(10)  15 seed(20260816)
-# Usage: Rscript fcr_data_analysis.R AA D out/AA_D
+
 #
 
 ################################################################################
