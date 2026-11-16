@@ -1,138 +1,63 @@
 #!/usr/bin/env Rscript
 ################################################################################
-# Analysis of spatially clustered cancer survival registry data using SBART
-# when a cluster-level covariate is unavailable
+# Data analysis of "Analysis of spatially clustered cancer survival registry data
+# using SBART when a cluster-level covariate is unavailable" (Section 5 and
+# Supplement Section 2): Florida Cancer Registry (FCR) breast cancer, 67 counties,
+# 6 strata = race (AA; WA = non-AA) x stage at diagnosis (L, R, D).
 #
-# Data analysis of the paper: Section 5 (Data Analysis) of the main text and
-# Section 2 of the Supplementary Materials.  Florida Cancer Registry (FCR)
-# breast-cancer survival in the 67 Florida counties, analysed separately in six
-# strata: race (AA = African American, WA = non-AA) x stage at diagnosis
-# (L = Local, R = Regional, D = Distant).
+#   fit     Steps 1-3 of the method for one stratum (one MCMC chain):
+#           Step 1 CAR model for the county screening-mammography use M (BRFSS),
+#           Step 2 spatial SBART survival model with M_hat plugged in,
+#           Step 3 importance weights, so that all summaries use the full posterior.
+#   report  pools the chains of each stratum and writes Tables 1-2, Figures 3-5
+#           and S5-S17, and paper_numbers.txt (the numbers quoted in the text).
 #
-# The file has two commands.
-#   fit     runs the three steps of the method for one stratum (one MCMC chain):
-#     Step 1  CAR model for the unobservable county-level screening-mammography
-#             use (SMU) M_i from the BRFSS data D_0 alone: MH for logit(M_i),
-#             Gibbs for sigma_0^2, MH for rho_0.  Gives the posterior sample of
-#             M and the Bayes estimate M_hat = E[M | D_0].
-#     Step 2  spatial SBART survival model for the FCR data D_1 with M_hat
-#             plugged in: Poisson-thinning data augmentation, SoftBart update
-#             of the trees of b(t, M, x), Gibbs for lambda_0 and sigma_1^2, MH
-#             for rho_1 and component-wise MH for R = log W (CAR frailties).
-#             This targets the approximate posterior with M fixed at M_hat.
-#     Step 3  importance reweighting: every retained Step-2 draw is paired with
-#             a fresh draw M^(b) from p(M | D_0) and gets the weight
-#               log w = sum_ij [ delta_ij log{Phi(b(y_ij,M_i))/Phi(b(y_ij,Mhat_i))}
-#                       - lambda_0 W_i int_0^{y_ij} {Phi(b(s,M_i)) - Phi(b(s,Mhat_i))} ds ],
-#             which turns the Step-2 sample into a sample from the full joint
-#             posterior.  Every posterior summary is a weighted average.
-#   report  pools the chains of each stratum and writes every table, figure and
-#           number of the data analysis.
-#
-# ------------------------------------------------------------------ Data
-# The FCR data were obtained through a formal data request (see the Data
-# availability statement of the paper).  THE DATA ARE NOT INCLUDED HERE.  Both
-# commands read the following files from the working directory:
-#   Surv_data2.csv  FCR extract, one row per patient, with a header row (its
-#                   names are ignored) and 12 columns read by position: row
-#                   index; survival time (days); county code; treatment delay
-#                   (1 = short, 3 = long); death indicator (1 = death); biopsy
-#                   delay (1 = short, 3 = long); age at diagnosis (years); HR
-#                   status (1 = positive); tumour grade (1, 2, 3); race
-#                   (2 = African American, 1 = non-AA); SMU probability (not
-#                   used); stage (1 Local, 2 Regional, 3 Distant).  County code
-#                   = (FIPS + 1)/2, i.e. 1-67 in FIPS order (Miami-Dade = 13,
-#                   from its former FIPS code 025).
+# Data (NOT included; obtained from the FCR by formal request), read from the
+# working directory:
+#   Surv_data2.csv  one row per patient, header row, 12 columns by position: index,
+#                   survival time (days), county code (1-67, FIPS order), treatment
+#                   delay (1 short, 3 long), death (1), biopsy delay (1 short, 3 long),
+#                   age, HR status (1 positive), grade (1-3), race (2 AA, 1 non-AA),
+#                   unused, stage (1 Local, 2 Regional, 3 Distant)
 #   mammo_county_16A.xlsx, mammo_county_16W.xlsx
-#                   BRFSS screening-mammography counts by county for AA and
-#                   non-AA women (SAS PROC FREQ table): 4 title rows, then one
-#                   row per county with the county FIPS code (Miami-Dade = 086),
-#                   the count reporting no mammography (column "0") and the
-#                   count reporting mammography (column "1").
-#   W.mat.csv       67 x 67 county adjacency matrix with a header row (its names
-#                   are ignored); the first column holds the row labels; rows
-#                   and columns in the county order of Surv_data2.csv.
-# Do not commit the data or any output: the *_details.rds files written by `fit`
-# contain individual-level records, and the outputs of `report` contain county
-# counts, some below 5 (paper_numbers.txt, Figure S12).  Keep the run and figure
-# folders outside the repository.
+#                   BRFSS mammography counts by county (AA, non-AA): 4 title rows,
+#                   then FIPS code, count "0" (no mammography), count "1" (mammography)
+#   W.mat.csv       67 x 67 county adjacency matrix (header row; first column = labels)
+# Do not commit the data or any output (individual records, small county counts).
 #
-# ------------------------------------------------------------------ Requirements
-# R with SoftBart, truncnorm and readxl (fit) and survival, readxl and maps
-# (report).  Tested with R 4.6.1, SoftBart 1.0.3, truncnorm 1.0.9, readxl 1.5.0,
-# survival 3.8.6 and maps 3.4.4.
+# Requires R with SoftBart, truncnorm, readxl, survival and maps.
 #
-# ------------------------------------------------------------------ Usage
-# Run every command from the folder that holds the data files, with SCRIPT set
-# to the path of this file (e.g. SCRIPT=/path/to/fcr_sbart_data_analysis.R).
-# The shell commands below work in bash and zsh.
-#
-#   Rscript "$SCRIPT" fit <RACE> <STAGE> <outdir> [num_iter burn_in num_tree
-#           use_step3 THIN NQ n1 b1 spatial county t_horizon seed]
-#     RACE (AA or WA), STAGE (L, R or D) and outdir are required.  Optional
-#     arguments, in this order, with their defaults: num_iter 30000 (Step-2
-#     iterations), burn_in 15000, num_tree 200, use_step3 1 (1 = 3-step method,
-#     0 = 2-step), THIN 10, NQ 50 (quadrature points for the Step-3 weights),
-#     n1 30000 and b1 10000 (Step-1 iterations and burn-in), spatial 1 (1 = CAR
-#     frailties, 0 = independent), county 6 (county of interest, Broward),
-#     t_horizon 10 (end of the grid of the survival curves, in years; keep it
-#     >= 10), seed 20260816.  Step 1 always uses the default seed, so all chains
-#     of a stratum share the same M_hat; another seed gives an additional chain
-#     (a new random-number stream for Steps 2-3 and dispersed starting values).
-#     Writes fcr_<RACE>_<STAGE>.rds, fcr_<RACE>_<STAGE>_details.rds and
-#     analysis.log to <outdir>.
-#
+# Usage (from the data folder; SCRIPT = path to this file):
+#   Rscript "$SCRIPT" fit <RACE> <STAGE> <outdir> [num_iter burn_in num_tree use_step3
+#           THIN NQ n1 b1 spatial county t_horizon seed]
+#     defaults 30000 15000 200 1 10 50 30000 10000 1 6 10 20260816 (use_step3 0 = 2-step,
+#     spatial 0 = independent frailties, county 6 = Broward); Step 1 always uses the
+#     default seed, so all chains of a stratum share M_hat
 #   Rscript "$SCRIPT" report <runs_dir> <figdir>
-#     For each stratum S (AA_L, ..., WA_D), pools every folder of <runs_dir> named
-#     S or S_chain<k> that holds fcr_S_details.rds, and writes to <figdir>:
-#       Figure3_boxplots_3step.pdf, Figure4_survival_3step.pdf,
-#       Figure5_dms10_td_3step.pdf                       Figures 3-5
-#       table1_vip.tex/.csv, table2_dms10_broward.tex/.csv  Tables 1-2
-#       FigureS5_km.pdf ... FigureS17_traces.pdf          Figures S5-S17
-#       paper_numbers.txt    every number quoted in Section 5 and Supplement
-#                            Section 2, with a short label
-#     Chains kept in folders with other names (e.g. preliminary runs) must be
-#     renamed, or linked, to these names.  A stratum without runs is skipped
-#     with a warning, and the outputs that need it are then incomplete or
-#     missing.  report needs runs with use_step3 = 1 and county = 6; the chains
-#     of a stratum must share every setting except num_iter, burn_in, THIN and
-#     seed, and have different seeds; Figure S17 needs AA R chains of equal
-#     length.
+#     pools, for each stratum S, the folders S and S_chain<k> of <runs_dir>
 #
-# The runs of the paper.  The strata are independent and can run in parallel;
-# run time grows with the number of patients, from one to two hours for AA
-# Distant to several days for the largest WA strata.  One chain per stratum:
+# Runs of the paper:
 #   for r in AA WA; do for s in L R D; do
 #     Rscript "$SCRIPT" fit $r $s out/${r}_${s}
 #   done; done
-# two more chains for each of AA R, AA D and WA D:
 #   Rscript "$SCRIPT" fit AA R out/AA_R_chain2 30000 15000 200 1 10 50 30000 10000 1 6 10 12345
 #   Rscript "$SCRIPT" fit AA R out/AA_R_chain3 30000 15000 200 1 10 50 30000 10000 1 6 10 777
 #   Rscript "$SCRIPT" fit AA D out/AA_D_chain2 30000 15000 200 1 10 50 30000 10000 1 6 10 12345
 #   Rscript "$SCRIPT" fit AA D out/AA_D_chain3 30000 15000 200 1 10 50 30000 10000 1 6 10 777
 #   Rscript "$SCRIPT" fit WA D out/WA_D_chain2 30000 15000 200 1 10 50 30000 10000 1 6 10 12345
 #   Rscript "$SCRIPT" fit WA D out/WA_D_chain3 30000 15000 200 1 10 50 30000 10000 1 6 10 777
-# and the tables, figures and numbers:
 #   Rscript "$SCRIPT" report out figures
-# The (WA, L) and (WA, R) results of the current version are preliminary: they
-# come from shorter chains, run in place of the full-length WA L and WA R runs:
+# The (WA, L) and (WA, R) results of the current version use shorter chains:
 #   Rscript "$SCRIPT" fit WA L out/WA_L        5000 3000 200 1 10 50 30000 10000 1 6 10 20261114
 #   Rscript "$SCRIPT" fit WA R out/WA_R        7000 3500 200 1 10 50 30000 10000 1 6 10 20261114
 #   Rscript "$SCRIPT" fit WA R out/WA_R_chain2 7000 3500 200 1 10 50 30000 10000 1 6 10 20261115
 #   Rscript "$SCRIPT" fit WA R out/WA_R_chain3 7000 3500 200 1 10 50 30000 10000 1 6 10 20261116
-# A check of every code path in a few minutes (very short chains, so the results
-# mean nothing, and R warns about zero-length arrows in Figure S12):
-#   for r in AA WA; do for s in L R D; do
-#     Rscript "$SCRIPT" fit $r $s out_test/${r}_${s} 60 30 10 1 10 10 300 150
-#   done; done
-#   Rscript "$SCRIPT" fit AA R out_test/AA_R_chain2 60 30 10 1 10 10 300 150 1 6 10 12345
-#   Rscript "$SCRIPT" report out_test figures_test
 #
-# TD and BD are the indicators of a SHORT treatment and biopsy delay, so every
-# DMS contrast for TD or BD is short minus long.  DMS values are in years.
+# TD and BD indicate a SHORT delay: every TD or BD contrast is short minus long.
+# DMS values are in years.
 ################################################################################
 
-## ---- helpers shared by fit and report ------------------------------------------
+## ---- helpers shared by fit and report
 ## weighted HPD: the shortest interval carrying `level` of the weight
 whpd <- function(v, w, level = 0.95) {
   o <- order(v); v <- v[o]; ww <- w[o]/sum(w); cw <- cumsum(ww); n <- length(v)
@@ -155,9 +80,8 @@ read_fcr <- function() {
   d <- read.csv("Surv_data2.csv")
   names(d) <- c("id", "days", "county", "TX", "death", "BX", "Age", "HR", "Tg", "Race", "SMUprob", "Stage")
   d }
-## BRFSS D_0 for one race: m_0i = number reporting mammography use, n_0i = county total.  A county
-## absent from the file gets n_0i = 0 and contributes NO binomial term (the CAR prior interpolates
-## it); coding it as 0 successes out of 1 would inject a false observation.
+## BRFSS D_0 for one race: m_0i of n_0i report mammography; a county absent from the file
+## gets n_0i = 0 (no binomial term; the CAR prior fills it in)
 read_brfss <- function(file, N) {
   bf <- suppressMessages(readxl::read_excel(file, skip = 4, col_names = FALSE))
   bcode <- suppressWarnings(as.numeric(bf[[1]]))
@@ -174,9 +98,7 @@ read_brfss <- function(file, N) {
 dev_res <- function(delta, cs) {
   mart <- delta - cs
   sign(mart) * sqrt(pmax(-2*(mart + delta*log(pmax(cs, 1e-12))), 0)) }
-## VIP: weighted mean over the draws (rows of the split counts vd) of the share of splitting rules
-## that use each variable; tumour grade combines its two indicators, and the time t is one of the
-## variables
+## VIP: weighted mean share of the splitting rules that use each variable (grade = 2 indicators)
 vip_of <- function(vd, w) {
   pr <- vd/pmax(rowSums(vd), 1)
   v <- colSums(w*pr)/sum(w)
@@ -185,18 +107,7 @@ vip_of <- function(vd, w) {
 
 ################################################################################
 # PART A -- fit: data processing and Steps 1-3 for one stratum
-#
-# Implementation notes
-#   * rho_0 and rho_1: uniform random-walk proposal truncated to the support of
-#     rho, with the Hastings correction for the truncation.
-#   * SoftBart's forest$do_gibbs() draws from R's random-number generator without
-#     saving its state.  The L'Ecuyer-CMRG generator is used, and after every
-#     call the generator moves to the next independent stream, so the other
-#     updates never re-use the random numbers of the tree update.
-#   * Step 3 evaluates the weights of the paper, with the integrals
-#     int_0^y Phi(b(s, M, x)) ds computed by an NQ-point midpoint rule.
-#   * Outputs: fcr_<S>.rds (posterior summaries of this chain) and
-#     fcr_<S>_details.rds (the draws and residuals that `report` pools).
+# Writes fcr_<S>.rds (summaries) and fcr_<S>_details.rds (draws pooled by report).
 ################################################################################
 fit_stratum <- function(args) {
   options(warn = -1)
@@ -233,15 +144,11 @@ fit_stratum <- function(args) {
   RNGkind("L'Ecuyer-CMRG")
   set.seed(20260816)   # Step 1 always uses this stream, so every chain shares the same M_hat
 
-  ################################################################################
-  # 0. Data
-  ################################################################################
+  ## ==== 0. Data
   A <- as.matrix(read.csv("W.mat.csv", row.names = 1))
   N <- nrow(A); D <- diag(rowSums(A))
   stopifnot(county_oi %in% seq_len(N))
-  ## the adjacency must be in the county order of the data (FIPS order): check some
-  ## known Florida neighbours (Broward 6 - Palm Beach 50, Miami-Dade 13 - Monroe 44,
-  ## Escambia 17 - Santa Rosa 57, Hillsborough 29 - Pinellas 52, Leon 37 - Gadsden 20)
+  ## check that the adjacency follows the county order of the data (known neighbours)
   adj_ok <- N == 67 && all(A[cbind(c(6, 13, 17, 29, 37), c(50, 44, 57, 52, 20))] == 1)
 
   surv_raw <- read_fcr()
@@ -286,14 +193,12 @@ fit_stratum <- function(args) {
   lg(sprintf("settings: K=%d iter=%d burn=%d THIN=%d NQ=%d step3=%d spatial=%d",
              num_tree, num_iter, burn_in, THIN, NQ, use_step3, spatial))
 
-  ## rho support from the eigenvalues of the normalised adjacency D^{-1/2} A D^{-1/2},
-  ## capped at (-1,1).
+  ## support of rho from the eigenvalues of D^{-1/2} A D^{-1/2}, capped at (-1, 1)
   dv <- rowSums(A); An <- diag(1/sqrt(dv)) %*% A %*% diag(1/sqrt(dv))
   ev_n <- eigen((An + t(An))/2, only.values = TRUE)$values
   rho_bounds <- c(max(-1, 1/min(ev_n)), min(1, 1/max(ev_n)))
 
-  ## log|D - rho A| = sum(log a_i+) + sum_k log(1 - rho e_k), e_k the eigenvalues of
-  ## D^{-1/2} A D^{-1/2}
+  ## log|D - rho A| from the same eigenvalues
   car_ld <- function(x, rho, s2)
     0.5*(sum(log(dv)) + sum(log(pmax(1 - rho*ev_n, 1e-300))) - N*log(s2)) -
     0.5*as.numeric(t(x) %*% (D - rho*A) %*% x)/s2
@@ -303,9 +208,7 @@ fit_stratum <- function(args) {
   iid_ld <- function(x, rho, s2) sum(dnorm(x, 0, sqrt(s2), log = TRUE))
   frail_ld <- if (spatial == 1) car_ld else iid_ld     # spatial = 0 is the competitor
 
-  ################################################################################
-  # 1. STEP 1 -- CAR model for M from D_0 alone
-  ################################################################################
+  ## ==== 1. STEP 1 -- CAR model for M from D_0 alone
   lg("=== STEP 1: CAR for M from BRFSS ===")
   logitM <- qlogis((m_0 + 0.5)/(n_0i + 1)); s0 <- 1; rho0 <- 0.9
   Msave <- matrix(NA_real_, n1, N); acc1 <- rep(0, N); acc_r0 <- 0
@@ -333,18 +236,14 @@ fit_stratum <- function(args) {
              mean(acc1)/n1, acc_r0/n1, min(M_hat), max(M_hat)))
   if (seed != 20260816) set.seed(seed)   # an additional chain: new stream for Steps 2-3 only
 
-  ################################################################################
-  # 2. STEP 2 -- SBART survival with Poisson-thinning data augmentation
-  ################################################################################
+  ## ==== 2. STEP 2 -- SBART survival with Poisson-thinning data augmentation
   lg("=== STEP 2: SBART survival ===")
   max_time <- max(sd_df$time)
   Xd <- cbind(sd_df$time/max_time, M_hat[cty], X)
   colnames(Xd) <- c("time", "M", cov_names)
   Yinit <- ifelse(sd_df$delta == 1, 0.5, -0.5) + rnorm(nt, 0, 0.1)
-  ## sigma fixed at 1, as the probit data augmentation requires. k = 1/3 sets the scale
-  ## 3/(2 sqrt(K)) of the leaf standard deviation sigma_mu; the other SBART hyperparameters
-  ## (half-Cauchy update of sigma_mu, splitting proportions, bandwidths) are the SoftBart
-  ## defaults of Linero and Yang (2018), including their warm-up of num_burn = burn_in.
+  ## SoftBart defaults (Linero and Yang, 2018); sigma = 1 for the probit augmentation,
+  ## leaf scale 3/(2 sqrt(K))
   hyp <- Hypers(Xd, Yinit, num_tree = num_tree, sigma_hat = 1, k = 1/3)
   next_stream <- function(st) assign(".Random.seed", parallel::nextRNGStream(st), envir = globalenv())
   st <- .Random.seed
@@ -375,9 +274,7 @@ fit_stratum <- function(args) {
   in_c <- which(cty == county_oi)
   if (length(in_c) == 0) { lg(sprintf("WARNING: county %d has no subjects; using stratum medians", county_oi))
                            in_c <- seq_len(nt) }
-  ## covariate values equal to the sample medians: the median for age, the lower
-  ## median (an observed value) for the binary covariates, and the lower median
-  ## tumour grade, coded by the two grade indicators
+  ## sample medians (lower median for the binary covariates and the grade)
   lowmed <- function(v) sort(v)[ceiling(length(v)/2)]
   rep_x <- function(rows) {
     Xs <- X[rows, , drop = FALSE]
@@ -402,7 +299,7 @@ fit_stratum <- function(args) {
   scen_block <- do.call(rbind, lapply(SCEN, function(s) mk_block(s$x, s$M)))
   nS <- length(SCEN)
 
-  ## ===== Additional prediction scenarios for the tables and figures (do not affect the MCMC) =====
+  ## additional prediction scenarios for the tables and figures (do not affect the MCMC)
   ## (a) Broward (county_oi) grade-specific contrasts, for Table 2
   xg <- function(xv, g) { xv["Grade2"] <- as.numeric(g == 2); xv["Grade3"] <- as.numeric(g == 3); xv }
   EXT <- list()
@@ -498,8 +395,7 @@ fit_stratum <- function(args) {
     }
     for (c2 in 1:N) {
       Rp <- Rv; Rp[c2] <- rnorm(1, Rv[c2], 0.2)
-      ## the exponent of W_i is delta_i+ + m_i+ : every rejected point also carries
-      ## a factor lambda_0 W_i in the complete-data likelihood
+      ## every rejected point also carries a factor lambda_0 W_i
       llp <- (d_cnt[c2] + m_cnt[c2])*Rp[c2] - lambda0*exp(Rp[c2])*sy[c2]
       llc <- (d_cnt[c2] + m_cnt[c2])*Rv[c2] - lambda0*exp(Rv[c2])*sy[c2]
       la <- (llp + frail_ld(Rp, rho1, s1)) - (llc + frail_ld(Rv, rho1, s1))
@@ -509,9 +405,7 @@ fit_stratum <- function(args) {
     keep_lam[iter] <- lambda0; keep_s1[iter] <- s1; keep_rho1[iter] <- rho1
     R_trace[iter, ] <- Rv
 
-    ############################################################################
-    # 3. STEP 3 -- importance weight for this draw, and the weighted summaries
-    ############################################################################
+    ## ==== 3. STEP 3 -- importance weight for this draw, and the weighted summaries
     if (iter > burn_in && iter %% THIN == 0) {
       lw <- 0; Mdraw <- M_hat
       if (use_step3 == 1) {
@@ -534,9 +428,7 @@ fit_stratum <- function(args) {
       sumw <- sumw + w
       w_lam <- w_lam + w*lambda0; w_W <- w_W + w*Wv
       w_rho1 <- w_rho1 + w*rho1;  w_s1 <- w_s1 + w*s1; w_M <- w_M + w*Mdraw
-      ## variable inclusion proportions, weighted and post-burn-in only
-      ## get_counts() returns a one-column matrix; as.numeric keeps vip_sum a
-      ## NAMED vector so the covariates can be addressed by name below
+      ## variable inclusion proportions (weighted, after burn-in)
       cnt <- as.numeric(forest$get_counts())
       vip_sum <- vip_sum + w * (if (sum(cnt) > 0) cnt/sum(cnt) else cnt)
       ## Cox-Snell residual r_ij = Lambda_hat(y_ij) = lambda_0 W_i Int_0^y Phi(b)
@@ -564,8 +456,7 @@ fit_stratum <- function(args) {
       W_draws[n_keep, ] <- Wv; M_draws[n_keep, ] <- Mdraw
       vip_draws[n_keep, ] <- cnt
       if (use_step3 == 1) {
-        ## the five county-specific scenarios take the drawn M_i; the "best county"
-        ## scenario is a stipulated value and stays as it is
+        ## county scenarios take the drawn M_i; the best-county scenario stays fixed
         sb <- scen_block; sb[, 2] <- c(rep(Mdraw[county_oi], 5*nT0), rep(M_best, nT0))
         phM <- matrix(pnorm(forest$do_predict(sb)), nT0, nS)
         S_scenM_sum <- S_scenM_sum + w * clip01(exp(-lambda0*Wv[county_oi]*cumtrap(t(phM), dt)))
@@ -577,9 +468,7 @@ fit_stratum <- function(args) {
                  as.numeric(difftime(Sys.time(), t_start, units = "mins"))))
   }
 
-  ################################################################################
-  # 4. Posterior summaries -- every one of them Step-3 weighted
-  ################################################################################
+  ## ==== 4. Posterior summaries -- every one of them Step-3 weighted
   lwk <- lw_keep[1:n_keep]; Wt <- exp(lwk - max(lwk))
   ess_w <- sum(Wt)^2/sum(Wt^2)
   w_top <- max(Wt)/sum(Wt); p_zero <- mean(lwk == 0)
@@ -593,10 +482,7 @@ fit_stratum <- function(args) {
   S_rep   <- S_scen_sum/sumw                     # posterior mean survival, per scenario
   S_repM  <- if (use_step3 == 1) S_scenM_sum/sumw else NULL
   vip_raw <- vip_sum/sumw
-  ## VIP over the paper's 6 covariates: tumour grade is the two dummies combined
-  ## VIP = posterior (Step-3 weighted) mean of the proportion of splitting rules
-  ## that use each variable; `time` is one of the variables, so the six covariates
-  ## need not sum to 1.
+  ## VIP of t and the 6 covariates (grade = its two indicators combined)
   vip6 <- c(Age = unname(vip_raw["Age"]), HR = unname(vip_raw["HR"]),
             Grade = unname(vip_raw["Grade2"] + vip_raw["Grade3"]), SMU = unname(vip_raw["M"]),
             TD = unname(vip_raw["TD"]), BD = unname(vip_raw["BD"]))
@@ -646,12 +532,7 @@ fit_stratum <- function(args) {
              as.numeric(difftime(Sys.time(), t_start, units = "mins"))))
 
 
-  ################################################################################
-  # 5. Detailed outputs for `report` (Step-3 weighted AND unweighted = 2-step)
-  #
-  # fit also stores DMS(5) and unweighted summaries that `report` does not use;
-  # they are kept so that the outputs match those of the runs of the paper.
-  ################################################################################
+  ## ==== 5. Detailed outputs for report (also DMS(5) and unweighted summaries)
   summ <- function(v, w) { h <- whpd(v, w)
     c(mean = sum(w*v)/sum(w), hpd_lo = h[1], hpd_hi = h[2], q025 = wq(v, w, .025), q975 = wq(v, w, .975)) }
   U <- rep(1, n_keep)
@@ -669,7 +550,7 @@ fit_stratum <- function(args) {
                DMS5 = s5["mean"], HPD5_lo = s5["hpd_lo"], HPD5_hi = s5["hpd_hi"],
                DMS10_unweighted = u10["mean"], HPD10_lo_unw = u10["hpd_lo"], HPD10_hi_unw = u10["hpd_hi"],
                DMS5_unweighted = u5["mean"], row.names = NULL) }))))
-  ## per-draw values of the same contrasts (rows = retained draws), for posterior probabilities
+  ## per-draw values of the same contrasts
   cn_g <- expand.grid(contrast = c("SMU", "BD", "TD"), grade = 1:3, stringsAsFactors = FALSE)
   k_of <- function(cn, g, star) match(sprintf(if (cn == "SMU") (if (star) "g%d_SMU" else "g%d_rep")
                                             else paste0("g%d_", cn, if (star) "1" else "0"), g), en)
@@ -718,11 +599,7 @@ fit_stratum <- function(args) {
 
 ################################################################################
 # PART B -- report: pooled posterior summaries, tables, figures and numbers
-#
-# The chains of a stratum share Step 1 (the same M_hat and posterior draws of M)
-# and their log-weights are absolute (log w with respect to the same M_hat), so
-# the self-normalised weights of the pooled draws are exp(logw - max over all
-# pooled draws).
+# Chains share Step 1, so the pooled weights are exp(logw - max over all draws).
 ################################################################################
 make_report <- function(runs_dir, figdir) {
   suppressMessages({ library(survival); library(readxl); library(maps) })
@@ -741,7 +618,7 @@ make_report <- function(runs_dir, figdir) {
   MARK <- c(Baker = 2, Escambia = 17, Broward = 6, Citrus = 9)          # counties marked in Figures 5 and S11
   MARK_PCH <- c(Baker = 21, Escambia = 22, Broward = 8, Citrus = 24)
   LONG_DELAY <- 3                                                       # data code of a long TD / BD
-  ## the quartz device embeds the fonts; the page sizes are close to the printed sizes
+  ## quartz embeds the fonts
   fig <- function(f, w, h) {
     if (capabilities("aqua")) quartz(type = "pdf", file = file.path(figdir, f), width = w, height = h)
     else grDevices::pdf(file.path(figdir, f), width = w, height = h) }
@@ -750,7 +627,7 @@ make_report <- function(runs_dir, figdir) {
   est <- function(v, w) { h <- whpd(v, w); sprintf("%s (%s, %s)", f3(wm(v, w)), f3(h[1]), f3(h[2])) }
   rep_grade <- function(P) if (P$x_rep[["Grade3"]] == 1) 3 else if (P$x_rep[["Grade2"]] == 1) 2 else 1
 
-  ## ---- read and pool the chains -----------------------------------------------------------
+  ## ---- read and pool the chains
   load_stratum <- function(S) {
     f <- function(d) file.path(runs_dir, d, sprintf("fcr_%s_details.rds", S))
     dirs <- list.files(runs_dir, pattern = sprintf("^%s(_chain[0-9]+)?$", S))
@@ -817,7 +694,7 @@ make_report <- function(runs_dir, figdir) {
   }
   CT <- lapply(R[have], county_table)
 
-  ## ---- data (as in fit) and the competing PH-frailty model ------------------------------------
+  ## ---- data (as in fit) and the competing PH-frailty model
   d0 <- read_fcr()
   d0$y <- pmax(d0$days/365.25, 1/365.25)
   d0$race <- factor(d0$Race, levels = c(2, 1), labels = c("AA", "WA"))    # other codes are NA, as in fit
@@ -830,9 +707,8 @@ make_report <- function(runs_dir, figdir) {
                 all((ds$death == 1) == (P$delta == 1)) && all(ds$county == P$county))
     ds$Mhat <- P$M_hat[ds$county]
     ds }
-  ## PH-frailty: Cox model with the Step-1 M_hat as a covariate and independent Gaussian county
-  ## frailties, fitted by penalised partial likelihood; cox.zph tests its proportional-hazards
-  ## assumption with the scaled Schoenfeld residuals
+  ## PH-frailty: Cox model with M_hat and iid Gaussian county frailties; cox.zph is the
+  ## Grambsch-Therneau test of proportional hazards
   PH <- lapply(setNames(have, have), function(S) {
     ds <- stratum_data(S, R[[S]])
     ph <- coxph(Surv(y, death == 1) ~ Age + I(HR == 1) + I(Tg == 2) + I(Tg == 3) + I(TX == 1) + I(BX == 1) +
@@ -847,9 +723,7 @@ make_report <- function(runs_dir, figdir) {
     sprintf("%.2f (%.2f, %.2f), p = %.2g", exp(cf[term, 1]), exp(cf[term, 1] - 1.96*cf[term, 2]),
             exp(cf[term, 1] + 1.96*cf[term, 2]), cf[term, "p"]) }
 
-  ################################################################################
-  # Main text: Table 1, Figures 3-5, Table 2
-  ################################################################################
+  ## ==== Main text: Table 1, Figures 3-5, Table 2
   ## ---- Table 1: VIP of the time t and the 6 covariates
   VIP <- sapply(STRATA, function(s) if (s %in% have) vip_of(R[[s]]$vip_draws, R[[s]]$w) else rep(NA, 7))
   rownames(VIP) <- c("Age", "HR", "Grade", "SMU", "TD", "BD", "time")
@@ -866,7 +740,7 @@ make_report <- function(runs_dir, figdir) {
                sapply(names(t1), row1),
                "\\hline", "\\end{tabular}"), file.path(figdir, "table1_vip.tex"))
 
-  ## ---- Figure 3: county proportions of long BD, of No SMU (1 - M_hat) and of long TD; AA left, WA right
+  ## ---- Figure 3: county proportions of long BD, No SMU (1 - M_hat) and long TD
   Mhat_race <- function(r) {
     s <- intersect(paste0(r, c("_L", "_R", "_D")), have)
     if (length(s)) R[[s[1]]]$M_hat else numeric(0) }
@@ -931,7 +805,7 @@ make_report <- function(runs_dir, figdir) {
                unlist(lapply(c("SMU", "BD", "TD"), function(cn) c("\\midrule", sapply(1:3, function(g) row2(cn, g))))),
                "\\bottomrule", "\\end{tabular}"), file.path(figdir, "table2_dms10_broward.tex"))
 
-  ## ---- Figures 5 and S11: county DMS(10) for short versus long TD against n_i, with 95% HPD intervals
+  ## ---- Figures 5 and S11: county DMS(10) for TD against n_i
   plot_td_by_n <- function(file, ct, mar_r, ylim, ylab) {
     fig(file, 6.5, 4.1)
     par(mar = c(4.2, 4.4, 0.8, mar_r), las = 1)
@@ -954,9 +828,7 @@ make_report <- function(runs_dir, figdir) {
     plot_td_by_n("Figure5_dms10_td_3step.pdf", ct, 1.8, range(0, ct$TD10_lo, ct$TD10_hi), "DMS(10) (years)")
   }
 
-  ################################################################################
-  # Supplement Section 2: Figures S5-S17
-  ################################################################################
+  ## ==== Supplement Section 2: Figures S5-S17
   ## ---- Figure S5: Kaplan-Meier curves by stage and race; log-rank tests
   fig("FigureS5_km.pdf", 7, 3.1)
   par(mfrow = c(1, 3), mar = c(3.6, 4, 2, 0.6), mgp = c(2.3, 0.7, 0), las = 1)
@@ -973,7 +845,7 @@ make_report <- function(runs_dir, figdir) {
   invisible(dev.off())
   LR_strat <- survdiff(Surv(y, death == 1) ~ race + strata(stage), data = d0)$chisq
 
-  ## ---- Figures S6-S8: residuals of the Regional strata, spatial SBART (pooled, weighted) vs PH-frailty
+  ## ---- Figures S6-S8: residuals, spatial SBART vs PH-frailty
   RES <- list()
   for (S in intersect(c("AA_R", "WA_R"), have))
     RES[[S]] <- list(ds = PH[[S]]$ds, cs_sb = R[[S]]$cox_snell, dv_sb = R[[S]]$deviance_res,
@@ -1069,9 +941,8 @@ make_report <- function(runs_dir, figdir) {
     axis(1, at = xs, labels = sprintf("%s (%d)", sel$name, sel$n_i), las = 2, cex.axis = 0.7)
     invisible(dev.off())
 
-    ## ---- Figures S13-S15: Step 1 for M (AA BRFSS), spatial CAR (from the runs) vs a spatially
-    ## independent model fitted here: logit(M_i) = mu + e_i, e_i iid N(0, s0), flat prior on mu, the
-    ## IG(1, 1) prior of Step 1 on s0, the same proposals and the same number of iterations as Step 1
+    ## ---- Figures S13-S15: Step 1 for M (AA BRFSS), CAR (runs) vs an independent model
+    ## logit(M_i) = mu + e_i, e_i iid N(0, s0), fitted here like Step 1
     X1 <- P$X[[1]]
     bf <- read_brfss("mammo_county_16A.xlsx", N)
     m0 <- bf$m_0
@@ -1119,7 +990,7 @@ make_report <- function(runs_dir, figdir) {
     arrows(log(n0), car$q[1, ], log(n0), car$q[3, ], angle = 90, code = 3, length = 0.02, col = "grey40")
     invisible(dev.off())
 
-    ## ---- Figure S16: frailty W_i, AA Regional: posterior mean and 95% interval for 3 counties
+    ## ---- Figure S16: frailty W_i of 3 counties, AA Regional
     n_i <- tabulate(P$county, nbins = N)
     Wm <- colSums(P$w * P$W_draws)/sum(P$w)
     Wq <- sapply(1:N, function(i) wq(P$W_draws[, i], P$w, c(0.025, 0.975)))
@@ -1134,8 +1005,7 @@ make_report <- function(runs_dir, figdir) {
     text(n_i[pick], Wq[2, pick], COUNTY[pick], pos = 3, cex = 0.8)
     invisible(dev.off())
 
-    ## ---- Figure S17: Step-2 traces of the AA Regional chains: log sigma_1^2, rho_1, the 3-year survival
-    ## of the representative patient in Broward and the log-frailties of 3 counties (every THIN-th iteration)
+    ## ---- Figure S17: Step-2 traces of the AA Regional chains
     XD <- P$X
     bi <- XD[[1]]$settings[["burn_in"]]
     ni <- XD[[1]]$settings[["num_iter"]]
@@ -1168,9 +1038,7 @@ make_report <- function(runs_dir, figdir) {
     invisible(dev.off())
   }
 
-  ################################################################################
-  # paper_numbers.txt: every number quoted in Section 5 and in Supplement Section 2
-  ################################################################################
+  ## ==== paper_numbers.txt: the numbers quoted in the text
   txt <- character(0)
   say <- function(...) txt <<- c(txt, sprintf(...))
   lst <- function(x, sep = "; ") paste(names(x), x, collapse = sep)          # "name value; name value; ..."
