@@ -1,18 +1,6 @@
 # sim_worker.R -- one replicate of the simulation study (Section 4), R version.
 #
-# This is the GitHub script scenA.R (https://github.com/Durbadal0/Paper1); one file
-# serves all four scenarios through argument 6. Three things differ from scenA.R:
-#   * argument 15 (or the environment variable NCORES) sets the number of cores;
-#   * the PH-frailty and RSF bootstrap refits run on those cores. The resamples are
-#     drawn first, in the same order as in the one-core loops, so every result is
-#     identical to running scenA.R on one core.
-#   * the result file is written as repNN.rds.part and renamed when complete.
-# Everything else (data generation, Steps 1-3, AMSE, AES, intervals) is unchanged.
 #
-# Usage: Rscript sim_worker.R rep outdir num_iter burn_in num_tree scenario step3 \
-#                THIN NQ FINE_N NB_PH NB_RSF NT_B RSF_TREES NCORES
-options(warn = -1)
-# rep, outdir, iterations, burn-in, trees, scenario, step-3 switch
 args <- commandArgs(trailingOnly = TRUE)
 rep_id   <- as.integer(args[1])
 outdir   <- if (length(args) >= 2) args[2] else "scenA_out"
