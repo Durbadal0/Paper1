@@ -4,59 +4,6 @@
 # using SBART when a cluster-level covariate is unavailable" (Section 5 and
 # Supplement Section 2): Florida Cancer Registry (FCR) breast cancer, 67 counties,
 # 6 strata = race (AA; WA = non-AA) x stage at diagnosis (L, R, D).
-#
-#   fit     Steps 1-3 of the method for one stratum (one MCMC chain):
-#           Step 1 CAR model for the county screening-mammography use M (BRFSS),
-#           Step 2 spatial SBART survival model with M_hat plugged in,
-#           Step 3 importance weights, so that all summaries use the full posterior.
-#   report  pools the chains of each stratum and writes Tables 1-2, Figures 3-5
-#           and S5-S17, and paper_numbers.txt (the numbers quoted in the text).
-#
-# Data (NOT included; obtained from the FCR by formal request), read from the
-# working directory:
-#   Surv_data2.csv  one row per patient, header row, 12 columns by position: index,
-#                   survival time (days), county code (1-67, FIPS order), treatment
-#                   delay (1 short, 3 long), death (1), biopsy delay (1 short, 3 long),
-#                   age, HR status (1 positive), grade (1-3), race (2 AA, 1 non-AA),
-#                   unused, stage (1 Local, 2 Regional, 3 Distant)
-#   mammo_county_16A.xlsx, mammo_county_16W.xlsx
-#                   BRFSS mammography counts by county (AA, non-AA): 4 title rows,
-#                   then FIPS code, count "0" (no mammography), count "1" (mammography)
-#   W.mat.csv       67 x 67 county adjacency matrix (header row; first column = labels)
-# Never commit the data or the folders written by fit (they hold individual records).
-# The files written by report are the aggregate results shown in the paper.
-#
-# Requires R with SoftBart, truncnorm, readxl, survival and maps.
-#
-# Usage (from the data folder; SCRIPT = path to this file):
-#   Rscript "$SCRIPT" fit <RACE> <STAGE> <outdir> [num_iter burn_in num_tree use_step3
-#           THIN NQ n1 b1 spatial county t_horizon seed]
-#     defaults 30000 15000 200 1 10 50 30000 10000 1 6 10 20260816 (use_step3 0 = 2-step,
-#     spatial 0 = independent frailties, county 6 = Broward); Step 1 always uses the
-#     default seed, so all chains of a stratum share M_hat
-#   Rscript "$SCRIPT" report <runs_dir> <figdir>
-#     pools, for each stratum S, the folders S and S_chain<k> of <runs_dir>
-#
-# Runs of the paper:
-#   for r in AA WA; do for s in L R D; do
-#     Rscript "$SCRIPT" fit $r $s out/${r}_${s}
-#   done; done
-#   Rscript "$SCRIPT" fit AA R out/AA_R_chain2 30000 15000 200 1 10 50 30000 10000 1 6 10 12345
-#   Rscript "$SCRIPT" fit AA R out/AA_R_chain3 30000 15000 200 1 10 50 30000 10000 1 6 10 777
-#   Rscript "$SCRIPT" fit AA D out/AA_D_chain2 30000 15000 200 1 10 50 30000 10000 1 6 10 12345
-#   Rscript "$SCRIPT" fit AA D out/AA_D_chain3 30000 15000 200 1 10 50 30000 10000 1 6 10 777
-#   Rscript "$SCRIPT" fit WA D out/WA_D_chain2 30000 15000 200 1 10 50 30000 10000 1 6 10 12345
-#   Rscript "$SCRIPT" fit WA D out/WA_D_chain3 30000 15000 200 1 10 50 30000 10000 1 6 10 777
-#   Rscript "$SCRIPT" report out figures
-# The (WA, L) and (WA, R) results of the current version use shorter chains:
-#   Rscript "$SCRIPT" fit WA L out/WA_L        5000 3000 200 1 10 50 30000 10000 1 6 10 20261114
-#   Rscript "$SCRIPT" fit WA R out/WA_R        7000 3500 200 1 10 50 30000 10000 1 6 10 20261114
-#   Rscript "$SCRIPT" fit WA R out/WA_R_chain2 7000 3500 200 1 10 50 30000 10000 1 6 10 20261115
-#   Rscript "$SCRIPT" fit WA R out/WA_R_chain3 7000 3500 200 1 10 50 30000 10000 1 6 10 20261116
-#
-# TD and BD indicate a SHORT delay: every TD or BD contrast is short minus long.
-# DMS values are in years.
-################################################################################
 
 ## ---- helpers shared by fit and report
 ## weighted HPD: the shortest interval carrying `level` of the weight
