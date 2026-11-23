@@ -1,0 +1,84 @@
+Numbers of the data analysis: Step-3 weighted posterior summaries, chains pooled; DMS in years;
+TD and BD contrasts are short minus long delay; intervals are 95% HPD unless stated otherwise.
+Chains pooled:
+  AA_L: AA_L (30000 iterations, burn-in 15000, 1500 draws)
+  WA_L: WA_L (5000 iterations, burn-in 3000, 200 draws)
+  AA_R: AA_R (30000 iterations, burn-in 15000, 1500 draws), AA_R_chain2 (30000 iterations, burn-in 15000, 1500 draws), AA_R_chain3 (30000 iterations, burn-in 15000, 1500 draws)
+  WA_R: WA_R (7000 iterations, burn-in 3500, 350 draws), WA_R_chain2 (7000 iterations, burn-in 3500, 350 draws), WA_R_chain3 (7000 iterations, burn-in 3500, 350 draws)
+  AA_D: AA_D (30000 iterations, burn-in 15000, 1500 draws), AA_D_chain2 (30000 iterations, burn-in 15000, 1500 draws), AA_D_chain3 (30000 iterations, burn-in 15000, 1500 draws)
+  WA_D: WA_D (30000 iterations, burn-in 15000, 1500 draws), WA_D_chain2 (30000 iterations, burn-in 15000, 1500 draws), WA_D_chain3 (30000 iterations, burn-in 15000, 1500 draws)
+
+== Main text, Section 5 ==
+Counties: 67
+Patients (events) per stratum: AA_L 4330 (2705); WA_L 43513 (25304); AA_R 2161 (1425); WA_R 15589 (8515); AA_D 422 (372); WA_D 1994 (1616)
+Stratified log-rank test AA vs WA (strata = stage): chi-square 141.6 on 1 df, p = 1.2e-32
+Table 1, VIP (also table1_vip.csv):
+  Time t           AA_L 0.987  WA_L 0.735  AA_R 0.984  WA_R 0.627  AA_D 0.813  WA_D 0.805
+  Age              AA_L 0.000  WA_L 0.014  AA_R 0.000  WA_R 0.014  AA_D 0.002  WA_D 0.001
+  HR Status        AA_L 0.000  WA_L 0.029  AA_R 0.007  WA_R 0.048  AA_D 0.054  WA_D 0.046
+  Tumor Grade      AA_L 0.000  WA_L 0.104  AA_R 0.002  WA_R 0.121  AA_D 0.018  WA_D 0.014
+  SMU              AA_L 0.001  WA_L 0.020  AA_R 0.004  WA_R 0.083  AA_D 0.028  WA_D 0.043
+  Treatment Delay  AA_L 0.011  WA_L 0.018  AA_R 0.001  WA_R 0.055  AA_D 0.054  WA_D 0.051
+  Biopsy Delay     AA_L 0.000  WA_L 0.081  AA_R 0.001  WA_R 0.052  AA_D 0.031  WA_D 0.039
+Covariates ranked by VIP (the time t has VIP AA_L 0.987, WA_L 0.735, AA_R 0.984, WA_R 0.627, AA_D 0.813, WA_D 0.805):
+  AA_L: TD 0.011 > SMU 0.001 > Grade 0.000 > BD 0.000 > HR 0.000 > Age 0.000
+  WA_L: Grade 0.104 > BD 0.081 > HR 0.029 > SMU 0.020 > TD 0.018 > Age 0.014
+  AA_R: HR 0.007 > SMU 0.004 > Grade 0.002 > BD 0.001 > TD 0.001 > Age 0.000
+  WA_R: Grade 0.121 > SMU 0.083 > TD 0.055 > BD 0.052 > HR 0.048 > Age 0.014
+  AA_D: TD 0.054 > HR 0.054 > BD 0.031 > SMU 0.028 > Grade 0.018 > Age 0.002
+  WA_D: TD 0.051 > HR 0.046 > SMU 0.043 > BD 0.039 > Grade 0.014 > Age 0.001
+Figure 3, median over the counties, AA / WA: long BD 0.100 / 0.081; No SMU (1 - M_hat) 0.131 / 0.215; long TD 0.409 / 0.331
+M_hat, AA: Broward 0.873; median of the 67 counties 0.869; range 0.811 to 0.939 (largest: Escambia)
+M_hat, WA: Broward 0.835; median of the 67 counties 0.785; range 0.692 to 0.851 (largest: Sumter)
+Figure 4, S(t) of the representative patient in Broward, posterior mean (95% HPD):
+  AA_L: S(1) 0.693 (0.665, 0.724); S(2) 0.576 (0.543, 0.610); S(3) 0.492 (0.456, 0.527); S(5) 0.325 (0.289, 0.363); S(10) 0.321 (0.284, 0.356)
+  WA_L: S(1) 0.676 (0.659, 0.681); S(2) 0.572 (0.555, 0.576); S(3) 0.493 (0.480, 0.495); S(5) 0.327 (0.325, 0.329); S(10) 0.323 (0.320, 0.325)
+  AA_R: S(1) 0.790 (0.757, 0.821); S(2) 0.609 (0.558, 0.654); S(3) 0.476 (0.421, 0.528); S(5) 0.295 (0.240, 0.348); S(10) 0.289 (0.232, 0.340)
+  WA_R: S(1) 0.797 (0.779, 0.813); S(2) 0.680 (0.650, 0.694); S(3) 0.594 (0.555, 0.611); S(5) 0.406 (0.357, 0.429); S(10) 0.405 (0.355, 0.428)
+  AA_D: S(1) 0.686 (0.606, 0.775); S(2) 0.402 (0.295, 0.505); S(3) 0.248 (0.151, 0.345); S(5) 0.125 (0.056, 0.198); S(10) 0.104 (0.041, 0.174)
+  WA_D: S(1) 0.747 (0.695, 0.794); S(2) 0.568 (0.497, 0.632); S(3) 0.413 (0.339, 0.484); S(5) 0.213 (0.156, 0.292); S(10) 0.208 (0.150, 0.285)
+Figure 4, Local stage: largest |S_AA(t) - S_WA(t)| over the grid 0.031
+Table 2, DMS(10) (95% HPD), representative AA patient in Broward (also table2_dms10_broward.csv):
+  SMU grade 1: Local -0.002 (-0.009, 0.015); Regional -0.003 (-0.100, 0.047); Distant -0.040 (-0.399, 0.231)
+  SMU grade 2: Local -0.002 (-0.009, 0.015); Regional -0.003 (-0.104, 0.043); Distant -0.044 (-0.427, 0.235)
+  SMU grade 3: Local -0.002 (-0.009, 0.015); Regional -0.003 (-0.104, 0.042); Distant -0.040 (-0.436, 0.199)
+  BD  grade 1: Local -0.013 (-0.049, 0.038); Regional 0.006 (-0.114, 0.130); Distant -0.670 (-2.066, 0.005)
+  BD  grade 2: Local -0.013 (-0.049, 0.038); Regional 0.005 (-0.130, 0.122); Distant -0.663 (-2.123, 0.004)
+  BD  grade 3: Local -0.013 (-0.049, 0.038); Regional 0.005 (-0.114, 0.125); Distant -0.703 (-2.087, 0.002)
+  TD  grade 1: Local 0.454 (0.000, 0.782); Regional 0.036 (0.000, 0.372); Distant -0.663 (-1.390, 0.000)
+  TD  grade 2: Local 0.454 (0.000, 0.782); Regional 0.037 (-0.001, 0.372); Distant -0.703 (-1.465, 0.000)
+  TD  grade 3: Local 0.455 (0.000, 0.784); Regional 0.036 (0.000, 0.371); Distant -0.674 (-1.376, 0.000)
+TD, AA Local, Broward: largest DMS(10) over the 3 grades 0.455 (the representative patient has grade 2)
+  grade 1: posterior probability that DMS(10) is > 0: 0.825, = 0: 0.172, < 0: 0.003
+  grade 2: posterior probability that DMS(10) is > 0: 0.825, = 0: 0.172, < 0: 0.003
+  grade 3: posterior probability that DMS(10) is > 0: 0.825, = 0: 0.172, < 0: 0.003
+Figure 5 (AA Local, TD): 64 counties with patients, n_i from 1 to 769 (8 counties with n_i <= 2)
+  DMS(10) estimates 0.407 to 0.454; lower HPD limits 0.000 to 0.000; upper HPD limits 0.706 to 0.782
+  largest posterior probability of a negative DMS(10) over the counties 0.003
+PH-frailty hazard ratio (95% CI, p), short vs long TD:
+  AA_L: 0.85 (0.78, 0.92), p = 4.1e-05
+  WA_L: 0.85 (0.83, 0.88), p = 6.3e-33
+  AA_R: 0.88 (0.79, 0.98), p = 0.024
+  WA_R: 0.83 (0.79, 0.87), p = 1.5e-16
+  AA_D: 1.30 (1.05, 1.62), p = 0.017
+  WA_D: 1.15 (1.04, 1.28), p = 0.0087
+PH-frailty, Grambsch-Therneau test of proportional hazards for TD (cox.zph, scaled Schoenfeld residuals, km transform), p: AA_L 2.45e-07; WA_L 1.74e-41; AA_R 0.0125; WA_R 6.25e-06; AA_D 0.0012; WA_D 1.58e-06; largest p = 0.0125
+Counties whose 95% HPD interval of the SMU DMS(10) excludes 0: AA_L 0 of 64; WA_L 0 of 67; AA_R 0 of 60; WA_R 0 of 66; AA_D 0 of 45; WA_D 0 of 61
+
+== Supplement, Section 2 ==
+Log-rank test AA vs WA within each stage: Local chi-square 32.7, p = 1.1e-08; Regional chi-square 120.6, p = 4.7e-28; Distant chi-square 30.5, p = 3.4e-08
+Deviance residuals outside (-2, 2), spatial SBART vs PH-frailty: AA_L 5.2% vs 5.0%; WA_L 5.3% vs 5.2%; AA_R 4.7% vs 5.1%; WA_R 4.9% vs 5.0%; AA_D 8.5% vs 9.7%; WA_D 7.0% vs 7.3%
+Figure S7 (AA_R): outside (-2, 2) 4.7% (SBART) vs 5.1% (PH-frailty); above +2 / below -2: SBART 102 / 0, PH-frailty 110 / 0
+Figure S6 (AA_R): largest |Nelson-Aalen - 45-degree line| up to the 99th percentile of the residuals: SBART 0.076, PH-frailty 0.046
+Figure S8 (WA_R): outside (-2, 2) 4.9% (SBART) vs 5.0% (PH-frailty); above +2 / below -2: SBART 761 / 1, PH-frailty 784 / 0
+Figure S6 (WA_R): largest |Nelson-Aalen - 45-degree line| up to the 99th percentile of the residuals: SBART 0.053, PH-frailty 0.059
+Figure S9 (AA Regional, SMU): county DMS(10) from -0.008 to 0.000; exactly 0 in Escambia
+Figures S10-S11 (AA Regional, TD): 60 counties; DMS(10) estimates from 0.030 to 0.036; HPD interval excludes 0 in 0 counties
+Figure S12: median width of the HPD interval of the TD DMS(10): n_i < 5 (19 counties) 0.347; 50 < n_i < 100 (5 counties) 0.367; n_i >= 100 (6 counties) 0.368
+Figure S16 (AA Regional), W_i posterior mean (95% interval; width): Citrus n_i < 10: 1.07 (0.60, 1.80; 1.20); Escambia n_i = 74: 1.21 (0.89, 1.63; 0.74); Broward n_i = 419: 1.36 (1.15, 1.67; 0.53)
+Figure S16: width ratio Citrus / Broward 2.28, versus 10.23 = sqrt of the ratio of their n_i
+Figure S13 (AA BRFSS): n_0i from < 10 to 126; Var{logit(M_i) | D_0} under the CAR model from 0.052 to 0.293
+Figure S13: median Var{logit(M_i) | D_0}, lowest / highest quartile of n_0i: CAR 0.149 / 0.075, independent model 0.234 / 0.105
+Figures S13-S14: posterior variance larger under the independent model in 62 of 67 counties; largest |M_hat(independent) - M_hat(CAR)| 0.047
+Figure S15: median width of the 95% interval of M_i, lowest / highest quartile of n_0i: 0.172 / 0.124; Spearman correlation of M_hat_i and log(n_0i) 0.06
+Figure S17 (AA Regional): 3 chains (seeds 20260816, 12345, 777), 30000 iterations, burn-in 15000

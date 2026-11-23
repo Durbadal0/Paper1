@@ -1,0 +1,12 @@
+== scenario B, 2-step algorithm
+rep04.rds  scenario B: all fields identical
+        AMSE  R: 0.0010476235 0.0106947990 0.0309796878
+        AMSE C++: 0.0010476235 0.0106947990 0.0309796878
+
+1 of 1 replicates identical in every field; largest difference in any field: 0
+== scenario D, 2-step algorithm
+rep04.rds  scenario D: all fields identical
+        AMSE  R: 0.0009701318 0.0082811345 0.0107952636
+        AMSE C++: 0.0009701318 0.0082811345 0.0107952636
+
+1 of 1 replicates identical in every field; largest difference in any field: 0

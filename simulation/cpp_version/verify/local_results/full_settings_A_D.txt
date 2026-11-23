@@ -1,0 +1,22 @@
+== final files: scenario A, full settings of config.sh, 40/16 bootstrap refits, NCORES=6
+
+== scenario A
+rep01.rds  scenario A: all fields identical
+        AMSE  R: 0.0007623505 0.0103476938 0.0082729405
+        AMSE C++: 0.0007623505 0.0103476938 0.0082729405
+
+1 of 1 replicates identical in every field; largest difference in any field: 0
+
+== earlier engine (quadratic form computed in C++): scenarios A and D
+== scenario A (full settings; engine before the sigma^2 change)
+rep01.rds  scenario A: s1_post differs by up to 2.2e-16; trace differs by up to 1.3e-15
+        AMSE  R: 0.0007623505 0.0103476938 0.0082729405
+        AMSE C++: 0.0007623505 0.0103476938 0.0082729405
+
+0 of 1 replicates identical in every field; largest difference in any field: 1.3e-15
+== scenario D (full settings; engine before the sigma^2 change)
+rep01.rds  scenario D: s1_post differs by up to 2.2e-16; trace differs by up to 3.6e-15
+        AMSE  R: 0.0009512423 0.0068470277 0.0110781721
+        AMSE C++: 0.0009512423 0.0068470277 0.0110781721
+
+0 of 1 replicates identical in every field; largest difference in any field: 3.6e-15

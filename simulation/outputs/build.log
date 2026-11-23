@@ -1,0 +1,46 @@
+Job <340116082> is submitted to queue <priority>.
+<<Waiting for dispatch ...>>
+<<Starting on noderome113>>
+R version '4.4.0' loaded
+GCC version '9.5.0' loaded
+libpng version '1.2.59-gcc-9.5.0' loaded
+Java version '20.0.2' loaded
+
+Loading R/4.4.0
+  Loading requirement: libpng/1.2.59-gcc-9.5.0 gcc/9.5.0 java/20.0.2
+    lapack/3.10.1
+Simulation outputs from /research/rgs01/home/clusterHome/dghosh35/Paper1 copy/SIMULATION_HPC_R/SIMULATION_HPC_CPP/results
+
+Scenario A: 100 replicates; n = 1250 subjects; censoring 12.0% (mean over replicates)
+  settings: 10000 iterations, 3500 burn-in, every 10-th kept (650 draws), K = 200 trees, 3-step algorithm
+  bootstrap refits PH/RSF = 500/500; run time per replicate: median 353 min
+  AMSE mean (SD): spatial SBART 0.00062 (0.00019); RSF 0.01193 (0.00152); PH-frailty 0.00681 (0.00433)
+  AMSE median [IQR]: spatial SBART 0.00058 [0.00050, 0.00073]; RSF 0.01170 [0.01085, 0.01292]; PH-frailty 0.00612 [0.00425, 0.00811]
+  spatial SBART has the lowest AMSE in 100 of 100 replicates
+  coverage (Table S1): spatial SBART 83.6%; RSF 17.5%; PH-frailty 10.3%
+
+Scenario B: 100 replicates; n = 1250 subjects; censoring 12.0% (mean over replicates)
+  settings: 10000 iterations, 3500 burn-in, every 10-th kept (650 draws), K = 200 trees, 3-step algorithm
+  bootstrap refits PH/RSF = 500/500; run time per replicate: median 350 min
+  AMSE mean (SD): spatial SBART 0.00100 (0.00047); RSF 0.01225 (0.00275); PH-frailty 0.01122 (0.00820)
+  AMSE median [IQR]: spatial SBART 0.00090 [0.00069, 0.00109]; RSF 0.01164 [0.01048, 0.01315]; PH-frailty 0.00898 [0.00602, 0.01318]
+  spatial SBART has the lowest AMSE in 100 of 100 replicates
+  coverage (Table S1): spatial SBART 72.3%; RSF 16.5%; PH-frailty 9.0%
+
+Scenario C: 100 replicates; n = 1250 subjects; censoring 12.0% (mean over replicates)
+  settings: 10000 iterations, 3500 burn-in, every 10-th kept (650 draws), K = 200 trees, 3-step algorithm
+  bootstrap refits PH/RSF = 500/500; run time per replicate: median 345 min
+  AMSE mean (SD): spatial SBART 0.00063 (0.00023); RSF 0.01136 (0.00135); PH-frailty 0.00535 (0.00339)
+  AMSE median [IQR]: spatial SBART 0.00058 [0.00046, 0.00074]; RSF 0.01122 [0.01036, 0.01227]; PH-frailty 0.00449 [0.00332, 0.00656]
+  spatial SBART has the lowest AMSE in 100 of 100 replicates
+  coverage (Table S1): spatial SBART 84.7%; RSF 16.0%; PH-frailty 11.8%
+
+Scenario D: 100 replicates; n = 1000 subjects; censoring 12.0% (mean over replicates)
+  settings: 10000 iterations, 3500 burn-in, every 10-th kept (650 draws), K = 200 trees, 3-step algorithm
+  bootstrap refits PH/RSF = 500/500; run time per replicate: median 230 min
+  AMSE mean (SD): spatial SBART 0.00097 (0.00028); RSF 0.00973 (0.00247); PH-frailty 0.01028 (0.00582)
+  AMSE median [IQR]: spatial SBART 0.00092 [0.00079, 0.00114]; RSF 0.00913 [0.00806, 0.01063]; PH-frailty 0.00946 [0.00669, 0.01247]
+  spatial SBART has the lowest AMSE in 100 of 100 replicates
+  coverage (Table S1): spatial SBART 96.0%; RSF 28.1%; PH-frailty 11.8%
+
+outputs written to /research/rgs01/home/clusterHome/dghosh35/Paper1 copy/SIMULATION_HPC_R/SIMULATION_HPC_CPP/summary_for_paper 
